@@ -3,25 +3,33 @@ import Sidebar from "./Sidebar.jsx";
 import InputBar from "./InputBar.jsx";
 import CodeBlock from "./CodeBlock.jsx";
 import { generateAIResponse } from "../utils/ai.js";
-import MessageBubble from "./MessageBubble.jsx"; 
-// Firebase Firestore imports
-import { 
-    collection, 
-    addDoc, 
-    updateDoc, 
-    doc, 
-    deleteDoc, 
-    query, 
-    where, 
-    orderBy, 
-    onSnapshot, 
-    serverTimestamp,
-    writeBatch
-} from "firebase/firestore";
-import { db } from "../utils/firebase.js";
+import MessageBubble from "./MessageBubble.jsx"; // adjust path if needed
+// ===== Dummy storage =====
+let fakeSessions = [];
+let fakeLibrary = [];
+
+const getSessions = () => fakeSessions;
+const getLibraryItems = () => fakeLibrary;
+const getSession = (id) => fakeSessions.find(s => s.id === id);
+const createSession = () => {
+  const newS = { id: Date.now().toString(), title: 'New Chat', messages: [], timestamp: Date.now() };
+  fakeSessions.push(newS);
+  return newS;
+};
+const updateSessionMessages = (id, messages) => {
+  const s = fakeSessions.find(s => s.id === id);
+  if (s) s.messages = messages;
+};
+const getActiveSessionId = () => fakeSessions.length ? fakeSessions[0].id : null;
+const setActiveSessionId = (id) => {}; // noop for now
+const saveTheme = (theme) => localStorage.setItem('theme', theme);
+const getTheme = () => localStorage.getItem('theme') || 'onyx';
+const addLibraryItem = (title, content) => fakeLibrary.push({ id: Date.now().toString(), title, content });
+const deleteLibraryItem = (id) => { fakeLibrary = fakeLibrary.filter(i => i.id !== id) };
+const renameSession = (id, title) => { const s = fakeSessions.find(s => s.id === id); if(s) s.title = title; };
+const deleteSession = (id) => { fakeSessions = fakeSessions.filter(s => s.id !== id); };
 
 function ChatInterface({ currentUser, onOpenAuth, onOpenPricing, onLogout }) {
-    // --- State Management ---
     const [currentSessionId, setCurrentSessionId] = React.useState(null);
     const [messages, setMessages] = React.useState([]);
     const [sessions, setSessions] = React.useState([]);
@@ -34,61 +42,52 @@ function ChatInterface({ currentUser, onOpenAuth, onOpenPricing, onLogout }) {
     const [editingSessionId, setEditingSessionId] = React.useState(null);
     const [editTitle, setEditTitle] = React.useState("");
 
+    // Search State
     const [searchQuery, setSearchQuery] = React.useState('');
+    
+    // Library State
     const [showAddPrompt, setShowAddPrompt] = React.useState(false);
     const [newPromptTitle, setNewPromptTitle] = React.useState('');
     const [newPromptContent, setNewPromptContent] = React.useState('');
 
-    const [currentTheme, setCurrentTheme] = React.useState(localStorage.getItem('theme') || 'onyx');
+    // Theme State
+    const [currentTheme, setCurrentTheme] = React.useState('onyx');
+
     const messagesEndRef = React.useRef(null);
 
-    // --- Firebase Real-time Sync ---
+    // Initial Load
     React.useEffect(() => {
-        if (!currentUser) {
-            setSessions([]);
-            setLibraryItems([]);
-            return;
+        refreshSessions();
+        refreshLibrary();
+        
+        // Try to load active session
+        const lastActiveId = getActiveSessionId();
+        if (lastActiveId) {
+            loadSession(lastActiveId);
         }
 
-        const qChats = query(
-            collection(db, "chats"),
-            where("userId", "==", currentUser.uid),
-            orderBy("timestamp", "desc")
-        );
-
-        const unsubChats = onSnapshot(qChats, (snapshot) => {
-            const sessionsData = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
-            setSessions(sessionsData);
-        });
-
-        const qLib = query(
-            collection(db, "library"),
-            where("userId", "==", currentUser.uid),
-            orderBy("timestamp", "desc")
-        );
-
-        const unsubLib = onSnapshot(qLib, (snapshot) => {
-            const libData = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
-            setLibraryItems(libData);
-        });
-
-        return () => {
-            unsubChats();
-            unsubLib();
-        };
-    }, [currentUser]);
-
-    // --- Theme & Persistence Logic ---
-    React.useEffect(() => {
-        applyTheme(currentTheme);
+        // Load and Apply Theme
+        const savedTheme = getTheme();
+        applyTheme(savedTheme);
     }, []);
 
+    // Save active session ID when it changes
+    React.useEffect(() => {
+        if (currentSessionId) {
+            setActiveSessionId(currentSessionId);
+        }
+    }, [currentSessionId]);
+
+    // Save messages to current session when they change
+    React.useEffect(() => {
+        if (currentSessionId && messages.length > 0) {
+            updateSessionMessages(currentSessionId, messages);
+            refreshSessions(); // Refresh list to update titles/previews
+        }
+        scrollToBottom();
+    }, [messages, currentSessionId]);
+
+    // Hide premium card if user is already Pro/Pro+
     React.useEffect(() => {
         if (currentUser && (currentUser.plan === 'pro' || currentUser.plan === 'pro_plus')) {
             setShowPremiumCard(false);
@@ -97,61 +96,80 @@ function ChatInterface({ currentUser, onOpenAuth, onOpenPricing, onLogout }) {
         }
     }, [currentUser]);
 
-    const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    };
-
-    React.useEffect(() => {
-        scrollToBottom();
-    }, [messages, isTyping]);
-
     const applyTheme = (theme) => {
         setCurrentTheme(theme);
-        localStorage.setItem('theme', theme);
+        saveTheme(theme);
+        
         const root = document.documentElement;
+        // Refined Colors: Deeper, more subtle, less "ugly" saturation
         switch(theme) {
             case 'midnight':
+                // Deep Navy Blue
                 root.style.setProperty('--bg-primary', '#020408'); 
                 root.style.setProperty('--bg-secondary', '#0a0c14');
                 break;
             case 'obsidian':
+                // Deepest Plum/Charcoal
                 root.style.setProperty('--bg-primary', '#050405'); 
                 root.style.setProperty('--bg-secondary', '#0e0b0e'); 
                 break;
             case 'forest':
+                // Very Dark Racing Green
                 root.style.setProperty('--bg-primary', '#010502'); 
                 root.style.setProperty('--bg-secondary', '#050a06');
                 break;
             case 'onyx':
             default:
+                // Pure Black & Dark Gray
                 root.style.setProperty('--bg-primary', '#000000');
                 root.style.setProperty('--bg-secondary', '#121212');
                 break;
         }
     };
 
-    // --- Chat Logic ---
-    const handleNewChat = () => {
-        setCurrentSessionId(null);
-        setMessages([]);
-        setSidebarOpen(false);
-        setActivePanel(null);
+    const refreshSessions = () => {
+        setSessions(getSessions());
     };
 
-    const loadSession = (session) => {
-        setCurrentSessionId(session.id);
-        setMessages(session.messages || []);
+    const refreshLibrary = () => {
+        setLibraryItems(getLibraryItems());
+    };
+
+    const loadSession = (sessionId) => {
+        const session = getSession(sessionId);
+        if (session) {
+            setCurrentSessionId(sessionId);
+            setMessages(session.messages || []);
+            setSidebarOpen(false); // Close mobile sidebar if open
+        } else {
+            setCurrentSessionId(null);
+            setMessages([]);
+        }
+    };
+
+    const handleNewChat = () => {
+        const newSession = createSession();
+        setCurrentSessionId(newSession.id);
+        setMessages([]);
+        refreshSessions();
         setSidebarOpen(false);
+        setActivePanel(null); // Close sidebar panel for fresh start
     };
 
     const handleSendMessage = async (text, images, modelMode) => {
-        if (!currentUser) return onOpenAuth();
-
         let sessionId = currentSessionId;
+        
+        // If no session exists (fresh load), create one now
+        if (!sessionId) {
+            const newSession = createSession();
+            sessionId = newSession.id;
+            setCurrentSessionId(sessionId);
+        }
+
         const userMsg = {
             role: 'user',
             content: text,
-            images: images || [],
+            images: images,
             timestamp: new Date().toISOString()
         };
         
@@ -160,22 +178,6 @@ function ChatInterface({ currentUser, onOpenAuth, onOpenPricing, onLogout }) {
         setIsTyping(true);
 
         try {
-            if (!sessionId) {
-                const docRef = await addDoc(collection(db, "chats"), {
-                    userId: currentUser.uid,
-                    title: text.substring(0, 40) || "New Chat",
-                    messages: newMessages,
-                    timestamp: serverTimestamp()
-                });
-                sessionId = docRef.id;
-                setCurrentSessionId(sessionId);
-            } else {
-                await updateDoc(doc(db, "chats", sessionId), {
-                    messages: newMessages,
-                    timestamp: serverTimestamp()
-                });
-            }
-
             const responseText = await generateAIResponse(newMessages, modelMode);
             
             const aiMsg = {
@@ -184,16 +186,14 @@ function ChatInterface({ currentUser, onOpenAuth, onOpenPricing, onLogout }) {
                 timestamp: new Date().toISOString()
             };
             
-            const finalMessages = [...newMessages, aiMsg];
-            setMessages(finalMessages);
-
-            await updateDoc(doc(db, "chats", sessionId), {
-                messages: finalMessages
-            });
-
+            setMessages(prev => [...prev, aiMsg]);
         } catch (error) {
-            console.error("Chat Error:", error);
-            const errorMsg = { role: 'assistant', content: "Sorry, I encountered an error. Please try again.", timestamp: new Date().toISOString() };
+            console.error(error);
+            const errorMsg = {
+                role: 'assistant',
+                content: "I encountered an error processing your request.",
+                timestamp: new Date().toISOString()
+            };
             setMessages(prev => [...prev, errorMsg]);
         } finally {
             setIsTyping(false);
@@ -201,42 +201,51 @@ function ChatInterface({ currentUser, onOpenAuth, onOpenPricing, onLogout }) {
     };
 
     const handleEditMessage = async (index, newText) => {
-        if (!currentSessionId) return;
-        
+        // 1. Slice history up to the edited message
+        // We keep everything BEFORE the edited message
         const prevMessages = messages.slice(0, index);
-        const editedMsg = { ...messages[index], content: newText, timestamp: new Date().toISOString() };
-        const newHistory = [...prevMessages, editedMsg];
         
+        // 2. Create the new user message
+        const oldMsg = messages[index];
+        const newMsg = { ...oldMsg, content: newText, timestamp: new Date().toISOString() };
+        
+        // 3. Combine
+        const newHistory = [...prevMessages, newMsg];
         setMessages(newHistory);
         setIsTyping(true);
 
+        // 4. Regenerate from this point
         try {
+             // Defaulting to Auto mode for regeneration, or we could track the original mode
             const responseText = await generateAIResponse(newHistory, 'Auto');
-            const aiMsg = { role: 'assistant', content: responseText, timestamp: new Date().toISOString() };
-            const finalHistory = [...newHistory, aiMsg];
             
-            setMessages(finalHistory);
-            await updateDoc(doc(db, "chats", currentSessionId), {
-                messages: finalHistory,
-                timestamp: serverTimestamp()
-            });
+            const aiMsg = {
+                role: 'assistant',
+                content: responseText,
+                timestamp: new Date().toISOString()
+            };
+            
+            setMessages(prev => [...prev, aiMsg]);
         } catch (error) {
-            console.error(error);
+             console.error(error);
+             const errorMsg = {
+                role: 'assistant',
+                content: "I encountered an error regenerating the response.",
+                timestamp: new Date().toISOString()
+            };
+            setMessages(prev => [...prev, errorMsg]);
         } finally {
             setIsTyping(false);
         }
     };
 
-    const handleDeleteSession = async (e, sessionId) => {
+    const handleDeleteSession = (e, sessionId) => {
         e.stopPropagation();
-        if (window.confirm('Are you sure you want to delete this chat?')) {
-            try {
-                await deleteDoc(doc(db, "chats", sessionId));
-                if (currentSessionId === sessionId) {
-                    handleNewChat();
-                }
-            } catch (err) {
-                console.error("Failed to delete session", err);
+        if (confirm('Are you sure you want to delete this chat?')) {
+            deleteSession(sessionId);
+            refreshSessions();
+            if (currentSessionId === sessionId) {
+                handleNewChat();
             }
         }
     };
@@ -247,46 +256,34 @@ function ChatInterface({ currentUser, onOpenAuth, onOpenPricing, onLogout }) {
         setEditTitle(session.title);
     };
 
-    const saveEditing = async (e) => {
+    const saveEditing = (e) => {
         e.stopPropagation();
         if (editingSessionId) {
-            await updateDoc(doc(db, "chats", editingSessionId), { title: editTitle });
+            renameSession(editingSessionId, editTitle);
             setEditingSessionId(null);
+            refreshSessions();
         }
     };
 
-    const clearAllHistory = async () => {
-        if (window.confirm('DANGER: This will permanently delete ALL chat history. This cannot be undone.')) {
-            const batch = writeBatch(db);
-            sessions.forEach((session) => {
-                batch.delete(doc(db, "chats", session.id));
-            });
-            await batch.commit();
-            handleNewChat();
-        }
+    const cancelEditing = (e) => {
+        e.stopPropagation();
+        setEditingSessionId(null);
     };
 
-    // --- Library Logic ---
-    const handleAddLibraryItem = async () => {
+    // Library Functions
+    const handleAddLibraryItem = () => {
         if (!newPromptTitle.trim() || !newPromptContent.trim()) return;
-        try {
-            await addDoc(collection(db, "library"), {
-                userId: currentUser.uid,
-                title: newPromptTitle,
-                content: newPromptContent,
-                timestamp: serverTimestamp()
-            });
-            setNewPromptTitle('');
-            setNewPromptContent('');
-            setShowAddPrompt(false);
-        } catch (err) {
-            console.error("Library Error:", err);
-        }
+        addLibraryItem(newPromptTitle, newPromptContent);
+        setNewPromptTitle('');
+        setNewPromptContent('');
+        setShowAddPrompt(false);
+        refreshLibrary();
     };
 
-    const handleDeleteLibraryItem = async (id) => {
-         if (window.confirm('Remove this item from your library?')) {
-             await deleteDoc(doc(db, "library", id));
+    const handleDeleteLibraryItem = (id) => {
+         if (confirm('Remove this item from library?')) {
+             deleteLibraryItem(id);
+             refreshLibrary();
          }
     };
 
@@ -295,23 +292,38 @@ function ChatInterface({ currentUser, onOpenAuth, onOpenPricing, onLogout }) {
         setActivePanel(null);
     };
 
-    // --- Filter logic ---
+    // Settings Functions
+    const clearAllHistory = () => {
+        if (confirm('DANGER: This will permanently delete ALL chat history. Are you sure?')) {
+            localStorage.removeItem('grok_chat_sessions_v2');
+            refreshSessions();
+            handleNewChat();
+        }
+    };
+
+    const scrollToBottom = () => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    };
+
     const isHome = messages.length === 0;
+
+    // Filtered Sessions for Search
     const filteredSessions = searchQuery 
         ? sessions.filter(s => s.title.toLowerCase().includes(searchQuery.toLowerCase()))
         : sessions;
 
     return (
         <div className="flex h-screen w-full bg-[var(--bg-primary)] text-white overflow-hidden font-['Inter'] transition-colors duration-500">
+            
             {/* Mobile Sidebar Overlay */}
             {sidebarOpen && (
                 <div 
-                    className="fixed inset-0 bg-black/80 backdrop-blur-sm z-40 md:hidden animate-fade-in"
+                    className="fixed inset-0 bg-black/80 z-40 md:hidden"
                     onClick={() => setSidebarOpen(false)}
                 ></div>
             )}
 
-            {/* Sidebar Component */}
+            {/* Desktop Sidebar (Expandable) */}
             <Sidebar 
                 isOpen={true} 
                 onNewChat={handleNewChat}
@@ -323,51 +335,53 @@ function ChatInterface({ currentUser, onOpenAuth, onOpenPricing, onLogout }) {
                 onLogout={onLogout}
             />
             
-            {/* Dynamic Panels */}
+            {/* Side Panel (Library/History/Search/Settings) */}
             {activePanel && (
                 <div className="hidden md:flex flex-col w-80 border-r border-white/5 bg-[var(--bg-secondary)] animate-fade-in-up transition-all h-full z-20 shadow-2xl">
                     <div className="p-4 border-b border-white/5 flex justify-between items-center">
                         <h2 className="font-semibold text-lg capitalize">{activePanel === 'library' ? 'Library' : activePanel}</h2>
-                        <button 
-                            onClick={() => setActivePanel(null)}
-                            className="text-gray-500 hover:text-white transition-colors"
-                        >
+                        <button onClick={() => setActivePanel(null)} className="text-gray-500 hover:text-white">
                             <div className="icon-x text-lg"></div>
                         </button>
                     </div>
                     
                     <div className="flex-1 overflow-y-auto thin-scrollbar">
-                        {/* Search Panel */}
+                        
+                        {/* --- SEARCH PANEL --- */}
                         {activePanel === 'search' && (
                             <div className="p-4 space-y-4">
                                 <div className="relative">
                                     <div className="icon-search absolute left-3 top-2.5 text-gray-500 text-sm"></div>
                                     <input 
                                         type="text" 
-                                        placeholder="Search chats..."
+                                        placeholder="Search chats..." 
                                         value={searchQuery}
                                         onChange={(e) => setSearchQuery(e.target.value)}
-                                        className="w-full bg-[var(--bg-primary)] border border-white/10 rounded-lg py-2 pl-9 pr-3 text-sm text-white focus:outline-none focus:border-white/30 transition-all"
+                                        className="w-full bg-[var(--bg-primary)] border border-white/10 rounded-lg py-2 pl-9 pr-3 text-sm text-white focus:border-white/30 focus:outline-none"
+                                        autoFocus
                                     />
                                 </div>
+                                
                                 <div className="space-y-1">
-                                    {filteredSessions.map(session => (
-                                        <div 
-                                            key={session.id}
-                                            onClick={() => loadSession(session)}
-                                            className="p-3 rounded-lg hover:bg-white/5 cursor-pointer transition-colors group"
-                                        >
-                                            <div className="text-sm font-medium text-white truncate">{session.title}</div>
-                                            <div className="text-[10px] text-gray-500 mt-1">
-                                                {session.timestamp?.seconds ? new Date(session.timestamp.seconds * 1000).toLocaleDateString() : 'Just now'}
+                                    {filteredSessions.length === 0 ? (
+                                        <div className="text-center text-gray-500 text-sm py-8">No results found.</div>
+                                    ) : (
+                                        filteredSessions.map(session => (
+                                            <div 
+                                                key={session.id}
+                                                onClick={() => loadSession(session.id)}
+                                                className="p-3 rounded-lg hover:bg-white/5 cursor-pointer"
+                                            >
+                                                <div className="text-sm font-medium text-white truncate">{session.title}</div>
+                                                <div className="text-xs text-gray-500 mt-1">{new Date(session.timestamp).toLocaleDateString()}</div>
                                             </div>
-                                        </div>
-                                    ))}
+                                        ))
+                                    )}
                                 </div>
                             </div>
                         )}
 
-                        {/* Library Panel */}
+                        {/* --- LIBRARY PANEL --- */}
                         {activePanel === 'library' && (
                             <div className="p-4 space-y-4">
                                 {!showAddPrompt ? (
@@ -378,87 +392,112 @@ function ChatInterface({ currentUser, onOpenAuth, onOpenPricing, onLogout }) {
                                         <div className="icon-plus text-sm"></div> Add Prompt
                                     </button>
                                 ) : (
-                                    <div className="bg-[var(--bg-primary)] border border-white/10 rounded-lg p-3 space-y-2 animate-fade-in">
+                                    <div className="bg-[var(--bg-primary)] border border-white/10 rounded-lg p-3 space-y-2 animate-fade-in-up">
                                         <input 
-                                            className="w-full bg-transparent border-b border-white/10 pb-1 text-sm focus:outline-none focus:border-white/30"
-                                            placeholder="Prompt Title"
+                                            className="w-full bg-transparent border-b border-white/10 pb-1 text-sm focus:outline-none"
+                                            placeholder="Title"
                                             value={newPromptTitle}
                                             onChange={(e) => setNewPromptTitle(e.target.value)}
                                         />
                                         <textarea 
-                                            className="w-full bg-transparent text-sm text-gray-300 focus:outline-none resize-none h-20 thin-scrollbar"
-                                            placeholder="Write your prompt here..."
+                                            className="w-full bg-transparent text-sm text-gray-300 focus:outline-none resize-none h-20"
+                                            placeholder="Prompt content..."
                                             value={newPromptContent}
                                             onChange={(e) => setNewPromptContent(e.target.value)}
                                         ></textarea>
                                         <div className="flex gap-2 justify-end">
                                             <button onClick={() => setShowAddPrompt(false)} className="text-xs text-gray-500 hover:text-white">Cancel</button>
-                                            <button onClick={handleAddLibraryItem} className="text-xs bg-white text-black px-3 py-1 rounded font-bold hover:bg-gray-200">Save</button>
+                                            <button onClick={handleAddLibraryItem} className="text-xs bg-white text-black px-3 py-1 rounded font-bold">Save</button>
                                         </div>
                                     </div>
                                 )}
-                                
+
                                 <div className="space-y-2">
+                                    {libraryItems.length === 0 && !showAddPrompt && (
+                                        <div className="text-center text-gray-500 text-sm py-8">
+                                            <div className="icon-book-open mx-auto text-2xl mb-2 opacity-50"></div>
+                                            Save your favorite prompts here.
+                                        </div>
+                                    )}
                                     {libraryItems.map(item => (
                                         <div key={item.id} className="group relative bg-[var(--bg-primary)] border border-white/5 rounded-lg p-3 hover:border-white/20 transition-all">
                                             <h3 className="text-sm font-bold text-gray-200 mb-1">{item.title}</h3>
                                             <p className="text-xs text-gray-500 line-clamp-3 mb-2">{item.content}</p>
-                                            <button 
-                                                onClick={() => useLibraryPrompt(item.content)}
-                                                className="text-xs bg-white/10 hover:bg-white/20 px-2 py-1 rounded text-white transition-colors"
-                                            >Use</button>
-                                            <button 
-                                                onClick={() => handleDeleteLibraryItem(item.id)}
-                                                className="absolute top-2 right-2 p-1 text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
-                                            >
-                                                <div className="icon-trash text-xs"></div>
-                                            </button>
+                                            <div className="flex items-center gap-2 mt-2">
+                                                <button 
+                                                    onClick={() => useLibraryPrompt(item.content)}
+                                                    className="text-xs bg-white/10 hover:bg-white/20 px-2 py-1 rounded text-white flex items-center gap-1"
+                                                >
+                                                    <div className="icon-play text-[10px]"></div> Use
+                                                </button>
+                                                <button 
+                                                    onClick={() => handleDeleteLibraryItem(item.id)}
+                                                    className="absolute top-2 right-2 p-1 text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                >
+                                                    <div className="icon-trash text-xs"></div>
+                                                </button>
+                                            </div>
                                         </div>
                                     ))}
                                 </div>
                             </div>
                         )}
 
-                        {/* History Panel */}
+                        {/* --- HISTORY PANEL --- */}
                         {activePanel === 'history' && (
                             <div className="p-4 space-y-2">
+                                {sessions.length === 0 && (
+                                    <div className="text-gray-500 text-sm text-center py-4">No chat history yet.</div>
+                                )}
+                                
                                 {sessions.map(session => (
                                     <div 
                                         key={session.id}
-                                        onClick={() => loadSession(session)}
-                                        className={`group p-3 rounded-lg cursor-pointer transition-colors border border-transparent ${currentSessionId === session.id ? 'bg-white/10 border-white/10' : 'hover:bg-white/5'}`}
+                                        onClick={() => loadSession(session.id)}
+                                        className={`
+                                            group p-3 rounded-lg cursor-pointer transition-colors border border-transparent
+                                            ${currentSessionId === session.id ? 'bg-white/10 border-white/5' : 'hover:bg-white/5'}
+                                        `}
                                     >
                                         {editingSessionId === session.id ? (
                                             <div className="flex items-center gap-2">
                                                 <input 
                                                     type="text" 
-                                                    value={editTitle} 
+                                                    value={editTitle}
                                                     onChange={(e) => setEditTitle(e.target.value)}
                                                     onClick={(e) => e.stopPropagation()}
-                                                    className="bg-black border border-white/20 rounded px-2 py-1 text-sm w-full focus:outline-none"
+                                                    className="bg-black border border-white/20 rounded px-2 py-1 text-sm w-full focus:outline-none focus:border-white/50"
                                                     autoFocus
-                                                    onKeyDown={(e) => e.key === 'Enter' && saveEditing(e)}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') saveEditing(e);
+                                                        if (e.key === 'Escape') cancelEditing(e);
+                                                    }}
                                                 />
-                                                <button onClick={saveEditing} className="text-green-500"><div className="icon-check text-sm"></div></button>
+                                                <button onClick={saveEditing} className="text-green-500 hover:text-green-400"><div className="icon-check text-sm"></div></button>
+                                                <button onClick={cancelEditing} className="text-red-500 hover:text-red-400"><div className="icon-x text-sm"></div></button>
                                             </div>
                                         ) : (
                                             <div className="flex justify-between items-start gap-2">
                                                 <div className="flex-1 min-w-0">
                                                     <div className="text-white text-sm font-medium truncate">{session.title}</div>
-                                                    <div className="text-[10px] text-gray-500 mt-1">
-                                                        {session.timestamp?.seconds ? new Date(session.timestamp.seconds * 1000).toLocaleDateString() : 'Just now'}
+                                                    <div className="text-xs text-gray-500 mt-1">
+                                                        {new Date(session.timestamp).toLocaleDateString()}
                                                     </div>
                                                 </div>
+                                                
+                                                {/* Actions (Rename/Delete) */}
                                                 <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
                                                     <button 
                                                         onClick={(e) => startEditing(e, session)}
-                                                        className="p-1.5 text-gray-500 hover:text-white"
+                                                        className="p-1.5 text-gray-500 hover:text-white rounded hover:bg-white/10"
+                                                        title="Rename"
                                                     >
                                                         <div className="icon-pencil text-xs"></div>
                                                     </button>
                                                     <button 
                                                         onClick={(e) => handleDeleteSession(e, session.id)}
-                                                        className="p-1.5 text-gray-500 hover:text-red-400"
+                                                        className="p-1.5 text-gray-500 hover:text-red-400 rounded hover:bg-white/10"
+                                                        title="Delete"
                                                     >
                                                         <div className="icon-trash text-xs"></div>
                                                     </button>
@@ -470,49 +509,96 @@ function ChatInterface({ currentUser, onOpenAuth, onOpenPricing, onLogout }) {
                             </div>
                         )}
 
-                        {/* Settings Panel */}
+                        {/* --- SETTINGS PANEL --- */}
                         {activePanel === 'settings' && (
                             <div className="p-4 space-y-6">
                                 <div>
-                                    <h3 className="text-xs font-bold text-gray-500 uppercase mb-3 tracking-wider">Appearance</h3>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        {['onyx', 'midnight', 'obsidian', 'forest'].map(t => (
-                                            <button 
-                                                key={t}
-                                                onClick={() => applyTheme(t)}
-                                                className={`p-2 rounded-lg border text-xs capitalize transition-all ${currentTheme === t ? 'border-white bg-white/10' : 'border-white/5 hover:border-white/20'}`}
-                                            >
-                                                {t}
-                                            </button>
-                                        ))}
+                                    <h3 className="text-xs font-bold text-gray-500 uppercase mb-3">General</h3>
+                                    <div className="space-y-3">
+                                        {/* Theme Selector */}
+                                        <div>
+                                            <span className="text-sm text-gray-300 block mb-2">Theme</span>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                {[
+                                                    { id: 'onyx', label: 'Onyx', color: '#000000' },
+                                                    { id: 'midnight', label: 'Midnight', color: '#020408' },
+                                                    { id: 'obsidian', label: 'Obsidian', color: '#050405' },
+                                                    { id: 'forest', label: 'Forest', color: '#010502' }
+                                                ].map(theme => (
+                                                    <button
+                                                        key={theme.id}
+                                                        onClick={() => applyTheme(theme.id)}
+                                                        className={`
+                                                            flex items-center gap-2 p-2 rounded-lg border transition-all text-xs font-medium
+                                                            ${currentTheme === theme.id 
+                                                                ? 'border-white bg-white/10 text-white' 
+                                                                : 'border-white/5 bg-[var(--bg-primary)] text-gray-500 hover:border-white/20 hover:text-gray-300'}
+                                                        `}
+                                                    >
+                                                        <div className="w-3 h-3 rounded-full border border-white/20" style={{ backgroundColor: theme.color }}></div>
+                                                        {theme.label}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-center justify-between p-2 hover:bg-white/5 rounded-lg cursor-not-allowed opacity-70">
+                                            <span className="text-sm text-gray-300">Stream Responses</span>
+                                            <div className="w-8 h-4 bg-green-500/20 rounded-full relative"><div className="absolute right-0 top-0 w-4 h-4 bg-green-500 rounded-full"></div></div>
+                                        </div>
+
+                                        {/* Groq API Key Input (Removed - using internal key) */}
                                     </div>
                                 </div>
 
                                 <div>
-                                    <h3 className="text-xs font-bold text-gray-500 uppercase mb-3 tracking-wider">Account</h3>
+                                    <h3 className="text-xs font-bold text-gray-500 uppercase mb-3">Account</h3>
                                     {currentUser ? (
-                                        <div className="p-3 bg-white/5 rounded-lg border border-white/5">
-                                            <div className="text-sm font-bold text-white mb-1">{currentUser.name || 'User'}</div>
-                                            <div className="text-xs text-gray-500 mb-3">{currentUser.email}</div>
-                                            <button 
-                                                onClick={onLogout}
-                                                className="text-xs text-red-400 hover:underline"
-                                            >Sign Out</button>
+                                        <div className="p-3 bg-[var(--bg-primary)] rounded-lg border border-white/5 mb-3">
+                                            <div className="flex items-center gap-3 mb-2">
+                                                <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center font-bold text-xs text-white">
+                                                    {currentUser.name.substring(0,2).toUpperCase()}
+                                                </div>
+                                                <div className="flex flex-col">
+                                                    <span className="text-sm font-bold text-white">{currentUser.name}</span>
+                                                    <span className="text-xs text-gray-500">{currentUser.email}</span>
+                                                </div>
+                                            </div>
+                                            <div className="flex justify-between items-center mt-3 pt-3 border-t border-white/5">
+                                                <span className="text-xs text-gray-400">Current Plan: <span className="text-white font-bold capitalize">{currentUser.plan.replace('_', ' ')}</span></span>
+                                                <button onClick={onOpenPricing} className="text-xs text-blue-400 hover:text-blue-300">Change</button>
+                                            </div>
                                         </div>
                                     ) : (
                                         <button 
                                             onClick={onOpenAuth}
-                                            className="w-full text-left p-3 bg-white/5 border border-white/5 rounded-lg text-gray-300 text-sm hover:bg-white/10 transition-colors"
-                                        >Sign In</button>
+                                            className="w-full text-left p-2 hover:bg-white/10 text-gray-300 rounded-lg text-sm transition-colors flex items-center gap-2 mb-3"
+                                        >
+                                            <div className="icon-user text-sm"></div> Sign In / Sign Up
+                                        </button>
                                     )}
 
+                                    <h3 className="text-xs font-bold text-gray-500 uppercase mb-3 mt-6">Data</h3>
                                     <button 
                                         onClick={clearAllHistory}
-                                        className="w-full text-left p-3 mt-4 text-red-500/80 hover:text-red-500 text-sm flex items-center gap-2 group transition-colors"
+                                        className="w-full text-left p-2 hover:bg-red-500/10 text-red-400 hover:text-red-300 rounded-lg text-sm transition-colors flex items-center gap-2"
                                     >
-                                        <div className="icon-trash group-hover:scale-110 transition-transform"></div>
-                                        Clear Chat History
+                                        <div className="icon-trash text-sm"></div> Clear All History
                                     </button>
+                                </div>
+
+                                <div>
+                                    <h3 className="text-xs font-bold text-gray-500 uppercase mb-3">About</h3>
+                                    <div className="p-3 bg-[var(--bg-primary)] rounded-lg border border-white/5">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <div className="icon-orbit text-white"></div>
+                                            <span className="font-bold">Aura v1.5</span>
+                                        </div>
+                                        <p className="text-xs text-gray-500">
+                                            A minimalist AI interface designed for speed and clarity.
+                                            Inspired by Grok.
+                                        </p>
+                                    </div>
                                 </div>
                             </div>
                         )}
@@ -520,66 +606,103 @@ function ChatInterface({ currentUser, onOpenAuth, onOpenPricing, onLogout }) {
                 </div>
             )}
 
-            {/* Main Chat Area */}
-            <main className="flex-1 flex flex-col relative h-full w-full min-w-0">
-                {/* Mobile Header */}
-                <header className="md:hidden absolute top-0 left-0 right-0 h-16 flex items-center justify-between px-4 z-20 bg-black/50 backdrop-blur-md border-b border-white/5">
+            {/* Mobile Sidebar (Drawer) */}
+            <div className={`fixed inset-y-0 left-0 w-64 bg-[var(--bg-primary)] z-50 transform transition-transform duration-300 md:hidden ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+                 <div className="p-4 border-b border-white/10 flex justify-between items-center">
+                    <span className="font-bold">Aura</span>
+                    <button onClick={() => setSidebarOpen(false)}><div className="icon-x"></div></button>
+                 </div>
+                 <div className="p-4 space-y-4">
+                    <button onClick={handleNewChat} className="flex items-center gap-3 text-white w-full p-2 hover:bg-white/10 rounded-lg">
+                        <div className="icon-square-pen"></div> New Chat
+                    </button>
+
+                    {/* Mobile Auth Button */}
                     <button 
-                        onClick={() => setSidebarOpen(true)}
-                        className="p-2 text-gray-400 hover:text-white"
+                        onClick={() => {
+                            if (currentUser) onOpenPricing();
+                            else onOpenAuth();
+                        }}
+                        className="flex items-center gap-3 text-white w-full p-2 hover:bg-white/10 rounded-lg"
                     >
+                        <div className="icon-user"></div> {currentUser ? 'Manage Account' : 'Sign In'}
+                    </button>
+                    
+                    <div className="border-t border-white/10 pt-4">
+                        <div className="text-xs font-bold text-gray-500 uppercase mb-2">Recent History</div>
+                        <div className="space-y-1">
+                             {sessions.slice(0, 5).map(session => (
+                                <button 
+                                    key={session.id}
+                                    onClick={() => loadSession(session.id)}
+                                    className="block w-full text-left text-sm text-gray-300 p-2 hover:bg-white/5 rounded truncate"
+                                >
+                                    {session.title}
+                                </button>
+                             ))}
+                        </div>
+                    </div>
+                 </div>
+            </div>
+
+            {/* Main Content Area */}
+            <main className="flex-1 flex flex-col relative h-full w-full min-w-0">
+                
+                {/* Mobile Header */}
+                <header className="md:hidden absolute top-0 left-0 right-0 h-16 flex items-center justify-between px-4 z-20 bg-black/50 backdrop-blur-md">
+                    <button onClick={() => setSidebarOpen(true)} className="p-2 text-gray-400">
                         <div className="icon-menu text-xl"></div>
                     </button>
-                    <span className="font-bold tracking-tight text-white">Aura</span>
-                    <button 
-                        onClick={handleNewChat}
-                        className="p-2 text-gray-400 hover:text-white"
-                    >
-                        <div className="icon-square-pen text-xl"></div>
-                    </button>
+                    <span className="font-bold">Aura</span>
+                    <div className="w-8"></div>
                 </header>
 
+                {/* Content Container */}
                 <div className="flex-1 overflow-y-auto thin-scrollbar relative flex flex-col">
+                    
                     {isHome ? (
-                        /* Home State */
-                        <div className="flex-1 flex flex-col items-center justify-center p-4 w-full h-full max-w-3xl mx-auto animate-fade-in-up">
+                        /* HOME STATE - ALIGNMENT FIXED */
+                        <div className="flex-1 flex flex-col items-center justify-center p-4 w-full h-full min-h-[calc(100vh-64px)] max-w-3xl mx-auto animate-fade-in-up">
+                            
+                            {/* Big Logo */}
                             <div className="mb-10 flex flex-col items-center select-none">
                                 <span className="text-5xl md:text-6xl font-bold tracking-tight text-white mb-6">Aura</span>
                             </div>
 
-                            {/* Center Input */}
+                            {/* Input Bar - Centered */}
                             <div className="w-full mb-8 z-30">
-                                <InputBar 
-                                    onSendMessage={handleSendMessage} 
-                                    isTyping={isTyping} 
-                                    compact={false}
-                                />
+                                <InputBar onSendMessage={handleSendMessage} isTyping={isTyping} compact={false} />
                             </div>
 
-                            {/* Guest Welcome */}
+                            {/* Connect Saturn Banner (Only if guest) */}
                             {!currentUser && (
                                 <div 
                                     onClick={onOpenAuth}
-                                    className="flex items-center gap-4 bg-[var(--bg-secondary)] border border-white/10 rounded-full px-5 py-3 hover:bg-[#1a1a1a] transition-all cursor-pointer group scale-95 hover:scale-100"
+                                    className="flex items-center gap-4 bg-[var(--bg-secondary)] border border-white/10 rounded-full px-5 py-3 hover:bg-[#1a1a1a] transition-colors cursor-pointer group"
                                 >
                                     <div className="w-8 h-8 rounded-full bg-black flex items-center justify-center border border-white/10">
                                         <div className="icon-orbit text-white text-lg"></div>
                                     </div>
                                     <div className="flex flex-col">
-                                        <span className="text-sm font-semibold text-white group-hover:underline">Connect your Aura account</span>
+                                        <span className="text-sm font-semibold text-white group-hover:underline decoration-1 underline-offset-2">Connect your Aura account</span>
                                         <span className="text-xs text-gray-500">Unlock early features and personalized content.</span>
                                     </div>
+                                    <button className="ml-4 px-4 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-sm font-medium transition-colors">
+                                        Connect
+                                    </button>
                                 </div>
                             )}
+
                         </div>
                     ) : (
-                        /* Active Chat State */
+                        /* CHAT STATE */
                         <div className="flex flex-col min-h-full">
-                            <div className="flex-1 w-full max-w-3xl mx-auto px-4 pt-24 md:pt-10 pb-4">
+                            {/* Messages */}
+                            <div className="flex-1 w-full max-w-3xl mx-auto px-4 pt-20 pb-4">
                                 {messages.map((msg, idx) => (
                                     <MessageBubble 
                                         key={idx} 
-                                        index={idx}
+                                        index={idx} 
                                         message={msg} 
                                         onEdit={handleEditMessage} 
                                     />
@@ -587,24 +710,20 @@ function ChatInterface({ currentUser, onOpenAuth, onOpenPricing, onLogout }) {
                                 
                                 {isTyping && (
                                     <div className="flex items-center space-x-1 ml-4 mb-8 text-gray-500">
-                                        <div className="w-2 h-2 bg-white rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                                        <div className="w-2 h-2 bg-white rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-                                        <div className="w-2 h-2 bg-white rounded-full animate-bounce"></div>
+                                        <div className="w-2 h-2 bg-white rounded-full typing-dot"></div>
+                                        <div className="w-2 h-2 bg-white rounded-full typing-dot"></div>
+                                        <div className="w-2 h-2 bg-white rounded-full typing-dot"></div>
                                     </div>
                                 )}
-                                <div ref={messagesEndRef} className="h-4 w-full" />
+                                <div ref={messagesEndRef}></div>
                             </div>
-
-                            {/* Bottom Input Area */}
-                            <div className="sticky bottom-0 w-full bg-gradient-to-t from-[var(--bg-primary)] via-[var(--bg-primary)] to-transparent pt-10 pb-6 px-4 z-20">
+                            
+                            {/* Sticky Bottom Input */}
+                            <div className="sticky bottom-0 w-full bg-gradient-to-t from-[var(--bg-primary)] via-[var(--bg-primary)] to-transparent pt-10 pb-6 px-4 z-20 transition-colors duration-500">
                                 <div className="max-w-3xl mx-auto">
-                                    <InputBar 
-                                        onSendMessage={handleSendMessage} 
-                                        isTyping={isTyping} 
-                                        compact={true}
-                                    />
-                                    <div className="text-center mt-3 text-xs text-[#555] font-medium tracking-wide select-none">
-                                        Aura can make mistakes. Check important info.
+                                    <InputBar onSendMessage={handleSendMessage} isTyping={isTyping} compact={true} />
+                                    <div className="text-center mt-3 text-xs text-[#555] font-medium tracking-wide pb-2">
+                                        Aura can make mistakes.
                                     </div>
                                 </div>
                             </div>
@@ -612,7 +731,7 @@ function ChatInterface({ currentUser, onOpenAuth, onOpenPricing, onLogout }) {
                     )}
                 </div>
 
-                {/* Premium Promo Card */}
+                {/* Bottom Right Floating "Aura Premium" Card */}
                 {showPremiumCard && (
                     <div 
                         onClick={onOpenPricing}
@@ -627,6 +746,7 @@ function ChatInterface({ currentUser, onOpenAuth, onOpenPricing, onLogout }) {
                         </div>
                         <button className="ml-2 px-3 py-1 bg-white text-black text-xs font-bold rounded-full">Upgrade</button>
                         
+                        {/* Close Button on Hover */}
                         <button 
                             onClick={(e) => { e.stopPropagation(); setShowPremiumCard(false); }}
                             className="absolute -top-2 -right-2 bg-black border border-white/20 rounded-full p-0.5 text-white opacity-0 group-hover:opacity-100 transition-opacity"
@@ -635,9 +755,11 @@ function ChatInterface({ currentUser, onOpenAuth, onOpenPricing, onLogout }) {
                         </button>
                     </div>
                 )}
+
             </main>
         </div>
     );
 }
+
 
 export default ChatInterface;
