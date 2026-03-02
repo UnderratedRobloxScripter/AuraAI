@@ -139,14 +139,6 @@ function ChatInterface({ currentUser, onOpenAuth, onOpenPricing, onLogout }) {
         }
     };
 
-    const refreshSessions = () => {
-        setSessions(getSessions());
-    };
-
-    const refreshLibrary = () => {
-        setLibraryItems(getLibraryItems());
-    };
-
     const loadSession = (sessionId) => {
     const session = sessions.find(s => s.id === sessionId);
     if (session) {
