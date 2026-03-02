@@ -1,116 +1,108 @@
 import { db } from "./firebase";
-import { 
-  collection, 
-  doc, 
-  getDoc, 
-  getDocs, 
-  setDoc, 
-  updateDoc, 
-  deleteDoc, 
-  query, 
-  orderBy, 
-  limit, 
-  serverTimestamp 
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  query,
+  orderBy,
+  serverTimestamp
 } from "firebase/firestore";
 
-// --- Sessions Management ---
+const ACTIVE_SESSION_KEY = "aura_active_session";
+const THEME_KEY = "aura_theme";
 
-/**
- * Fetch all sessions for a specific user
- */
 export const getSessions = async (userId) => {
+  if (!userId) return [];
   try {
-    const q = query(
-      collection(db, "users", userId, "sessions"),
-      orderBy("timestamp", "desc")
-    );
+    const q = query(collection(db, "users", userId, "sessions"), orderBy("timestamp", "desc"));
     const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-  } catch (e) {
-    console.error('Failed to load sessions', e);
+    return querySnapshot.docs.map((snapshot) => ({ id: snapshot.id, ...snapshot.data() }));
+  } catch (error) {
+    console.error("Failed to load sessions", error);
     return [];
   }
 };
 
-/**
- * Create a new chat session in Firestore
- */
-export const createSession = async (userId, firstMessage = null) => {
-  const sessionRef = doc(collection(db, "users", userId, "sessions"));
-  const sessionId = sessionRef.id;
-  
-  let title = 'New Chat';
-  if (firstMessage) {
-    title = firstMessage.content.substring(0, 30);
-    if (firstMessage.content.length > 30) title += '...';
+export const getSession = async (userId, sessionId) => {
+  if (!userId || !sessionId) return null;
+  try {
+    const sessionRef = doc(db, "users", userId, "sessions", sessionId);
+    const snap = await getDoc(sessionRef);
+    if (!snap.exists()) return null;
+    return { id: snap.id, ...snap.data() };
+  } catch (error) {
+    console.error("Failed to load session", error);
+    return null;
   }
-
-  const newSession = {
-    title,
-    messages: firstMessage ? [firstMessage] : [],
-    timestamp: serverTimestamp(),
-  };
-
-  await setDoc(sessionRef, newSession);
-  return { id: sessionId, ...newSession };
 };
 
-/**
- * Update messages and handle auto-titling
- */
-export const updateSessionMessages = async (userId, sessionId, messages) => {
+export const createSession = async (userId) => {
+  if (!userId) return null;
+  const sessionRef = doc(collection(db, "users", userId, "sessions"));
+  const newSession = {
+    title: "New Chat",
+    messages: [],
+    timestamp: serverTimestamp()
+  };
+  await setDoc(sessionRef, newSession);
+  return { id: sessionRef.id, ...newSession };
+};
+
+export const updateSessionMessages = async (userId, sessionId, messages, title) => {
+  if (!userId || !sessionId) return;
   const sessionRef = doc(db, "users", userId, "sessions", sessionId);
-  const updateData = {
-    messages: messages,
+  const payload = {
+    messages,
     timestamp: serverTimestamp()
   };
 
-  // Auto-title logic for first exchange
-  if (messages.length > 0) {
-    const sessionSnap = await getDoc(sessionRef);
-    if (sessionSnap.exists() && sessionSnap.data().title === 'New Chat') {
-      const firstUserMsg = messages.find(m => m.role === 'user');
-      if (firstUserMsg) {
-        let title = firstUserMsg.content.substring(0, 30);
-        if (firstUserMsg.content.length > 30) title += '...';
-        updateData.title = title;
-      }
-    }
+  if (title && title.trim()) {
+    payload.title = title.trim();
   }
 
-  await updateDoc(sessionRef, updateData);
+  await updateDoc(sessionRef, payload);
 };
 
 export const renameSession = async (userId, sessionId, newTitle) => {
+  if (!userId || !sessionId) return;
   const sessionRef = doc(db, "users", userId, "sessions", sessionId);
   await updateDoc(sessionRef, { title: newTitle });
 };
 
 export const deleteSession = async (userId, sessionId) => {
+  if (!userId || !sessionId) return;
   const sessionRef = doc(db, "users", userId, "sessions", sessionId);
   await deleteDoc(sessionRef);
 };
 
-// --- Library (Prompts) Management ---
+export const clearAllSessions = async (userId) => {
+  if (!userId) return;
+  const sessions = await getSessions(userId);
+  await Promise.all(sessions.map((session) => deleteSession(userId, session.id)));
+};
 
 export const getLibraryItems = async (userId) => {
+  if (!userId) return [];
   try {
-    const q = query(
-      collection(db, "users", userId, "library"),
-      orderBy("timestamp", "desc")
-    );
+    const q = query(collection(db, "users", userId, "library"), orderBy("timestamp", "desc"));
     const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-  } catch (e) {
+    return querySnapshot.docs.map((snapshot) => ({ id: snapshot.id, ...snapshot.data() }));
+  } catch (error) {
+    console.error("Failed to load prompt library", error);
     return [];
   }
 };
 
 export const addLibraryItem = async (userId, title, content) => {
+  if (!userId) return null;
   const itemRef = doc(collection(db, "users", userId, "library"));
   const newItem = {
-    title: title || 'Untitled Prompt',
-    content: content,
+    title: title || "Untitled Prompt",
+    content,
     timestamp: serverTimestamp()
   };
   await setDoc(itemRef, newItem);
@@ -118,20 +110,20 @@ export const addLibraryItem = async (userId, title, content) => {
 };
 
 export const deleteLibraryItem = async (userId, id) => {
+  if (!userId || !id) return;
   const itemRef = doc(db, "users", userId, "library", id);
   await deleteDoc(itemRef);
 };
 
-// --- Theme & Active Session (UI State) ---
-// Note: Theme is usually better kept in localStorage for instant 
-// loading before Firebase Auth initializes, but here is the DB version:
-
-export const saveTheme = async (userId, theme) => {
-  const userRef = doc(db, "users", userId);
-  await updateDoc(userRef, { theme });
+export const saveTheme = (theme) => {
+  localStorage.setItem(THEME_KEY, theme);
 };
 
-export const saveActiveSession = async (userId, sessionId) => {
-  const userRef = doc(db, "users", userId);
-  await updateDoc(userRef, { lastActiveSession: sessionId });
+export const getTheme = () => localStorage.getItem(THEME_KEY) || "onyx";
+
+export const setActiveSessionId = (sessionId) => {
+  if (!sessionId) return;
+  localStorage.setItem(ACTIVE_SESSION_KEY, sessionId);
 };
+
+export const getActiveSessionId = () => localStorage.getItem(ACTIVE_SESSION_KEY);

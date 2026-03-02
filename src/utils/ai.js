@@ -41,3 +41,39 @@ export async function generateAIResponse(messages, modelMode = "Auto") {
     return mockResponse(messages, modelMode);
   }
 }
+
+export async function generateChatTitle(messages) {
+  try {
+    const contextMessages = messages
+      .filter((msg) => msg.role === "user" || msg.role === "assistant")
+      .slice(-6)
+      .map((msg) => ({ role: msg.role, content: msg.content }));
+
+    if (contextMessages.length === 0) {
+      return "New Chat";
+    }
+
+    const response = await fetch("/api/groq", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages: contextMessages,
+        task: "title"
+      })
+    });
+
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+
+    const rawTitle = (data.result || "").replace(/["'`]/g, "").trim();
+    if (!rawTitle) return "New Chat";
+
+    return rawTitle.length > 60 ? `${rawTitle.slice(0, 57)}...` : rawTitle;
+  } catch (error) {
+    console.error("Chat title generation failed:", error);
+
+    const firstUserMessage = messages.find((msg) => msg.role === "user")?.content || "";
+    if (!firstUserMessage) return "New Chat";
+    return firstUserMessage.length > 40 ? `${firstUserMessage.slice(0, 37)}...` : firstUserMessage;
+  }
+}
