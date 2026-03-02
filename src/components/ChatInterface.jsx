@@ -2,32 +2,24 @@ import React from "react";
 import Sidebar from "./Sidebar.jsx";
 import InputBar from "./InputBar.jsx";
 import CodeBlock from "./CodeBlock.jsx";
-import { generateAIResponse } from "../utils/ai.js";
-import MessageBubble from "./MessageBubble.jsx"; // adjust path if needed
-// ===== Dummy storage =====
-let fakeSessions = [];
-let fakeLibrary = [];
-
-const getSessions = () => fakeSessions;
-const getLibraryItems = () => fakeLibrary;
-const getSession = (id) => fakeSessions.find(s => s.id === id);
-const createSession = () => {
-  const newS = { id: Date.now().toString(), title: 'New Chat', messages: [], timestamp: Date.now() };
-  fakeSessions.push(newS);
-  return newS;
-};
-const updateSessionMessages = (id, messages) => {
-  const s = fakeSessions.find(s => s.id === id);
-  if (s) s.messages = messages;
-};
-const getActiveSessionId = () => fakeSessions.length ? fakeSessions[0].id : null;
-const setActiveSessionId = (id) => {}; // noop for now
-const saveTheme = (theme) => localStorage.setItem('theme', theme);
-const getTheme = () => localStorage.getItem('theme') || 'onyx';
-const addLibraryItem = (title, content) => fakeLibrary.push({ id: Date.now().toString(), title, content });
-const deleteLibraryItem = (id) => { fakeLibrary = fakeLibrary.filter(i => i.id !== id) };
-const renameSession = (id, title) => { const s = fakeSessions.find(s => s.id === id); if(s) s.title = title; };
-const deleteSession = (id) => { fakeSessions = fakeSessions.filter(s => s.id !== id); };
+import { generateAIResponse, generateChatTitle } from "../utils/ai.js";
+import MessageBubble from "./MessageBubble.jsx";
+import {
+    getSessions,
+    getSession,
+    createSession,
+    updateSessionMessages,
+    getActiveSessionId,
+    setActiveSessionId,
+    saveTheme,
+    getTheme,
+    addLibraryItem,
+    getLibraryItems,
+    deleteLibraryItem,
+    renameSession,
+    deleteSession,
+    clearAllSessions
+} from "../utils/storage.js";
 
 function ChatInterface({ currentUser, onOpenAuth, onOpenPricing, onLogout }) {
     const [currentSessionId, setCurrentSessionId] = React.useState(null);
@@ -57,19 +49,29 @@ function ChatInterface({ currentUser, onOpenAuth, onOpenPricing, onLogout }) {
 
     // Initial Load
     React.useEffect(() => {
-        refreshSessions();
-        refreshLibrary();
-        
-        // Try to load active session
-        const lastActiveId = getActiveSessionId();
-        if (lastActiveId) {
-            loadSession(lastActiveId);
+        if (!currentUser?.uid) {
+            setSessions([]);
+            setLibraryItems([]);
+            setCurrentSessionId(null);
+            setMessages([]);
+            return;
         }
 
-        // Load and Apply Theme
-        const savedTheme = getTheme();
-        applyTheme(savedTheme);
-    }, []);
+        const init = async () => {
+            await refreshSessions();
+            await refreshLibrary();
+
+            const lastActiveId = getActiveSessionId();
+            if (lastActiveId) {
+                await loadSession(lastActiveId);
+            }
+
+            const savedTheme = getTheme();
+            applyTheme(savedTheme);
+        };
+
+        init();
+    }, [currentUser?.uid]);
 
     // Save active session ID when it changes
     React.useEffect(() => {
@@ -80,12 +82,23 @@ function ChatInterface({ currentUser, onOpenAuth, onOpenPricing, onLogout }) {
 
     // Save messages to current session when they change
     React.useEffect(() => {
-        if (currentSessionId && messages.length > 0) {
-            updateSessionMessages(currentSessionId, messages);
-            refreshSessions(); // Refresh list to update titles/previews
-        }
-        scrollToBottom();
-    }, [messages, currentSessionId]);
+        const syncMessages = async () => {
+            if (currentSessionId && currentUser?.uid && messages.length > 0) {
+                const activeSession = sessions.find((session) => session.id === currentSessionId);
+                let nextTitle;
+
+                if (!activeSession || activeSession.title === 'New Chat') {
+                    nextTitle = await generateChatTitle(messages);
+                }
+
+                await updateSessionMessages(currentUser.uid, currentSessionId, messages, nextTitle);
+                await refreshSessions();
+            }
+            scrollToBottom();
+        };
+
+        syncMessages();
+    }, [messages, currentSessionId, currentUser?.uid]);
 
     // Hide premium card if user is already Pro/Pro+
     React.useEffect(() => {
@@ -127,16 +140,20 @@ function ChatInterface({ currentUser, onOpenAuth, onOpenPricing, onLogout }) {
         }
     };
 
-    const refreshSessions = () => {
-        setSessions(getSessions());
+    const refreshSessions = async () => {
+        if (!currentUser?.uid) return;
+        const data = await getSessions(currentUser.uid);
+        setSessions(data);
     };
 
-    const refreshLibrary = () => {
-        setLibraryItems(getLibraryItems());
+    const refreshLibrary = async () => {
+        if (!currentUser?.uid) return;
+        const data = await getLibraryItems(currentUser.uid);
+        setLibraryItems(data);
     };
 
-    const loadSession = (sessionId) => {
-        const session = getSession(sessionId);
+    const loadSession = async (sessionId) => {
+        const session = await getSession(currentUser?.uid, sessionId);
         if (session) {
             setCurrentSessionId(sessionId);
             setMessages(session.messages || []);
@@ -147,21 +164,31 @@ function ChatInterface({ currentUser, onOpenAuth, onOpenPricing, onLogout }) {
         }
     };
 
-    const handleNewChat = () => {
-        const newSession = createSession();
+    const handleNewChat = async () => {
+        if (!currentUser?.uid) {
+            onOpenAuth();
+            return;
+        }
+
+        const newSession = await createSession(currentUser.uid);
         setCurrentSessionId(newSession.id);
         setMessages([]);
-        refreshSessions();
+        await refreshSessions();
         setSidebarOpen(false);
         setActivePanel(null); // Close sidebar panel for fresh start
     };
 
     const handleSendMessage = async (text, images, modelMode) => {
+        if (!currentUser?.uid) {
+            onOpenAuth();
+            return;
+        }
+
         let sessionId = currentSessionId;
         
         // If no session exists (fresh load), create one now
         if (!sessionId) {
-            const newSession = createSession();
+            const newSession = await createSession(currentUser.uid);
             sessionId = newSession.id;
             setCurrentSessionId(sessionId);
         }
@@ -239,11 +266,11 @@ function ChatInterface({ currentUser, onOpenAuth, onOpenPricing, onLogout }) {
         }
     };
 
-    const handleDeleteSession = (e, sessionId) => {
+    const handleDeleteSession = async (e, sessionId) => {
         e.stopPropagation();
         if (confirm('Are you sure you want to delete this chat?')) {
-            deleteSession(sessionId);
-            refreshSessions();
+            await deleteSession(currentUser?.uid, sessionId);
+            await refreshSessions();
             if (currentSessionId === sessionId) {
                 handleNewChat();
             }
@@ -256,12 +283,12 @@ function ChatInterface({ currentUser, onOpenAuth, onOpenPricing, onLogout }) {
         setEditTitle(session.title);
     };
 
-    const saveEditing = (e) => {
+    const saveEditing = async (e) => {
         e.stopPropagation();
         if (editingSessionId) {
-            renameSession(editingSessionId, editTitle);
+            await renameSession(currentUser?.uid, editingSessionId, editTitle);
             setEditingSessionId(null);
-            refreshSessions();
+            await refreshSessions();
         }
     };
 
@@ -271,19 +298,19 @@ function ChatInterface({ currentUser, onOpenAuth, onOpenPricing, onLogout }) {
     };
 
     // Library Functions
-    const handleAddLibraryItem = () => {
+    const handleAddLibraryItem = async () => {
         if (!newPromptTitle.trim() || !newPromptContent.trim()) return;
-        addLibraryItem(newPromptTitle, newPromptContent);
+        await addLibraryItem(currentUser?.uid, newPromptTitle, newPromptContent);
         setNewPromptTitle('');
         setNewPromptContent('');
         setShowAddPrompt(false);
-        refreshLibrary();
+        await refreshLibrary();
     };
 
-    const handleDeleteLibraryItem = (id) => {
+    const handleDeleteLibraryItem = async (id) => {
          if (confirm('Remove this item from library?')) {
-             deleteLibraryItem(id);
-             refreshLibrary();
+             await deleteLibraryItem(currentUser?.uid, id);
+             await refreshLibrary();
          }
     };
 
@@ -293,11 +320,11 @@ function ChatInterface({ currentUser, onOpenAuth, onOpenPricing, onLogout }) {
     };
 
     // Settings Functions
-    const clearAllHistory = () => {
+    const clearAllHistory = async () => {
         if (confirm('DANGER: This will permanently delete ALL chat history. Are you sure?')) {
-            localStorage.removeItem('grok_chat_sessions_v2');
-            refreshSessions();
-            handleNewChat();
+            await clearAllSessions(currentUser?.uid);
+            await refreshSessions();
+            await handleNewChat();
         }
     };
 
