@@ -38,35 +38,63 @@ function ChatInterface({ currentUser, onOpenAuth, onOpenPricing, onLogout }) {
 
     // Initial Load
     React.useEffect(() => {
-        refreshSessions();
-        refreshLibrary();
-        
-        // Try to load active session
-        const lastActiveId = getActiveSessionId();
-        if (lastActiveId) {
-            loadSession(lastActiveId);
+        // If no user is logged in, clear local state and stop
+        if (!currentUser) {
+            setSessions([]);
+            setLibraryItems([]);
+            return;
         }
 
-        // Load and Apply Theme
-        const savedTheme = getTheme();
+        // 1. Live Sync Chats: Only fetch chats belonging to this user
+        const qChats = query(
+            collection(db, "chats"),
+            where("userId", "==", currentUser.uid),
+            orderBy("timestamp", "desc")
+        );
+
+        const unsubChats = onSnapshot(qChats, (snapshot) => {
+            const sessionsData = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+            setSessions(sessionsData);
+        }, (error) => {
+            console.error("Firebase History Error:", error);
+            // NOTE: If you see an error here, check your browser console for a link 
+            // to create the required Firestore Index.
+        });
+
+        // 2. Live Sync Library: Sync user's saved prompts
+        const qLib = query(
+            collection(db, "library"),
+            where("userId", "==", currentUser.uid),
+            orderBy("timestamp", "desc")
+        );
+
+        const unsubLib = onSnapshot(qLib, (snapshot) => {
+            const libData = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+            setLibraryItems(libData);
+        });
+
+        // 3. Apply Theme (logic stays local)
+        const savedTheme = localStorage.getItem('theme') || 'onyx';
         applyTheme(savedTheme);
-    }, []);
 
-    // Save active session ID when it changes
-    React.useEffect(() => {
-        if (currentSessionId) {
-            setActiveSessionId(currentSessionId);
-        }
-    }, [currentSessionId]);
+        // Cleanup listeners when component unmounts or user changes
+        return () => {
+            unsubChats();
+            unsubLib();
+        };
+    }, [currentUser]); // Runs whenever the user logs in/out
 
-    // Save messages to current session when they change
+    // We no longer need to "sync" messages here because handleSendMessage 
+    // pushes them to Firebase directly. We only care about scrolling.
     React.useEffect(() => {
-        if (currentSessionId && messages.length > 0) {
-            updateSessionMessages(currentSessionId, messages);
-            refreshSessions(); // Refresh list to update titles/previews
-        }
         scrollToBottom();
-    }, [messages, currentSessionId]);
+    }, [messages, isTyping]);
 
     // Hide premium card if user is already Pro/Pro+
     React.useEffect(() => {
