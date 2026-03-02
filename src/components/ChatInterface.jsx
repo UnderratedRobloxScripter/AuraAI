@@ -155,14 +155,12 @@ function ChatInterface({ currentUser, onOpenAuth, onOpenPricing, onLogout }) {
 };
 
     const handleNewChat = () => {
-        const newSession = createSession();
-        setCurrentSessionId(newSession.id);
-        setMessages([]);
-        refreshSessions();
-        setSidebarOpen(false);
-        setActivePanel(null); // Close sidebar panel for fresh start
-    };
-
+    setCurrentSessionId(null);
+    setMessages([]);
+    setSidebarOpen(false);
+    setActivePanel(null);
+};
+    
     const handleSendMessage = async (text, images, modelMode) => {
     if (!currentUser) return onOpenAuth();
 
@@ -331,12 +329,13 @@ function ChatInterface({ currentUser, onOpenAuth, onOpenPricing, onLogout }) {
     } catch (e) { console.error("Library save failed:", e); }
 };
 
-    const handleDeleteLibraryItem = (id) => {
-         if (confirm('Remove this item from library?')) {
-             deleteLibraryItem(id);
-             refreshLibrary();
-         }
-    };
+    const handleDeleteLibraryItem = async (id) => {
+    if (confirm('Remove this item from library?')) {
+        try {
+            await deleteDoc(doc(db, "library", id));
+        } catch (e) { console.error("Library delete failed:", e); }
+    }
+};
 
     const useLibraryPrompt = (content) => {
         handleSendMessage(content, [], 'Auto');
@@ -344,13 +343,16 @@ function ChatInterface({ currentUser, onOpenAuth, onOpenPricing, onLogout }) {
     };
 
     // Settings Functions
-    const clearAllHistory = () => {
-        if (confirm('DANGER: This will permanently delete ALL chat history. Are you sure?')) {
-            localStorage.removeItem('grok_chat_sessions_v2');
-            refreshSessions();
-            handleNewChat();
-        }
-    };
+    const clearAllHistory = async () => {
+    if (confirm('DANGER: This will permanently delete ALL chat history. Are you sure?')) {
+        const batch = writeBatch(db);
+        sessions.forEach((session) => {
+            batch.delete(doc(db, "chats", session.id));
+        });
+        await batch.commit();
+        handleNewChat();
+    }
+};
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
