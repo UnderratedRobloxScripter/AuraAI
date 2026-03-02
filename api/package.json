@@ -1,0 +1,22 @@
+{
+  "name": "server",
+  "version": "1.0.0",
+  "description": "Aura V2 backend for OTP + Groq AI",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "start:ai": "node aibackend.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "mongoose": "^9.2.3",
+    "node-fetch": "^2.7.0",
+    "nodemailer": "^8.0.1"
+  }
+}

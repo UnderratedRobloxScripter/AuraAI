@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aura AI Chat</title>
+    <meta name="description" content="A minimalist, dark-themed AI chat interface inspired by Aura.">
+    <meta name="keywords" content="AI, Chat, Aura, UI, Dark Mode, React">
+
+    <!-- Google Fonts: Inter & Fira Code (for code) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+
+    <!-- TailwindCSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Lucide Icons -->
+    <link href="https://resource.trickle.so/vendor_lib/unpkg/lucide-static@0.516.0/font/lucide.css" rel="stylesheet">
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js"></script>
+    <script>
+        const ChartJS = window.Chart;
+    </script>
+
+    <!-- PrismJS for Syntax Highlighting (One Dark theme approximation) -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-jsx.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-css.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js"></script>
+
+    <!-- Custom Tailwind + UI Styles -->
+    <style type="text/tailwindcss">
+        @layer theme {
+            :root {
+                --bg-primary: #000000;
+                --bg-secondary: #121212;
+                --accent-glow: rgba(255, 255, 255, 0.15);
+                --glass-border: rgba(255, 255, 255, 0.08);
+                --text-primary: #ffffff;
+                --text-secondary: #8e8e8e;
+            }
+        }
+
+        @layer base {
+            body {
+                @apply bg-[var(--bg-primary)] text-[var(--text-primary)] font-['Inter'] antialiased overflow-hidden;
+            }
+
+            ::-webkit-scrollbar {
+                width: 8px;
+                height: 8px;
+            }
+            ::-webkit-scrollbar-track { background: transparent; }
+            ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+            ::-webkit-scrollbar-thumb:hover { background: #444; }
+
+            pre[class*="language-"] {
+                margin: 0 !important;
+                padding: 0 !important;
+                background: transparent !important;
+                text-shadow: none !important;
+                font-family: 'Fira Code', monospace !important;
+                font-size: 14px !important;
+                line-height: 1.6 !important;
+            }
+
+            code[class*="language-"] {
+                font-family: 'Fira Code', monospace !important;
+                text-shadow: none !important;
+            }
+        }
+
+        @layer components {
+            .glass-panel { @apply bg-white/5 backdrop-blur-xl border border-[var(--glass-border)]; }
+            .thin-scrollbar {
+                scrollbar-width: thin;
+                scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+            }
+            .thin-scrollbar::-webkit-scrollbar { width: 4px !important; height: 4px !important; }
+            .thin-scrollbar::-webkit-scrollbar-track { background: transparent !important; }
+            .thin-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2) !important; border-radius: 4px !important; }
+            .thin-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.4) !important; }
+        }
+
+        @layer utilities {
+            .animate-fade-in-up { animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+            .animate-fade-in-down { animation: fadeInDown 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+
+            @keyframes fadeInUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+            @keyframes fadeInDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+
+            .typing-dot {
+                animation: typing 1.4s infinite ease-in-out both;
+            }
+            .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+            .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+
+            @keyframes typing { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
+        }
+    </style>
+
+    <link rel="icon" href="https://app.trickle.so/storage/public/images/usr_1b99b7a318000001/db579811-3ec0-45b7-a101-9257eeedbb06.png">
+    <meta property="og:title" content="Aura">
+    <meta property="og:description" content="A minimalist, dark-themed AI chat interface inspired by Aura.">
+    <meta property="og:image" content="https://app.trickle.so/storage/public/images/usr_1b99b7a318000001/c4210cc5-7f3b-42c5-8ec0-0f35cfa30bd2.png">
+    <meta name="twitter:title" content="Aura">
+    <meta name="twitter:description" content="A minimalist, dark-themed AI chat interface inspired by Aura.">
+    <meta name="twitter:image" content="https://app.trickle.so/storage/public/images/usr_1b99b7a318000001/c4210cc5-7f3b-42c5-8ec0-0f35cfa30bd2.png">
+</head>
+
+<body>
+    <div id="root"></div>
+
+    <!-- Vite will handle all React/JSX imports -->
+    <script type="module" src="/app.jsx"></script>
+</body>
+
+</html>

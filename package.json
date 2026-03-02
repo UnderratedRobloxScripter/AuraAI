@@ -1,0 +1,22 @@
+{
+  "name": "aura-v2",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "lucide-react": "^0.469.0",
+    "framer-motion": "^11.0.0",
+    "firebase": "^10.12.0"
+  },
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite",
+    "start": "vite preview",
+    "postinstall": "npm install firebase"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^5.1.4",
+    "vite": "^7.3.1"
+  }
+}
