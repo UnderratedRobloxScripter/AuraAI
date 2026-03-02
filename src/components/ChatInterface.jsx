@@ -4,30 +4,11 @@ import InputBar from "./InputBar.jsx";
 import CodeBlock from "./CodeBlock.jsx";
 import { generateAIResponse } from "../utils/ai.js";
 import MessageBubble from "./MessageBubble.jsx"; // adjust path if needed
-// ===== Dummy storage =====
-let fakeSessions = [];
-let fakeLibrary = [];
-
-const getSessions = () => fakeSessions;
-const getLibraryItems = () => fakeLibrary;
-const getSession = (id) => fakeSessions.find(s => s.id === id);
-const createSession = () => {
-  const newS = { id: Date.now().toString(), title: 'New Chat', messages: [], timestamp: Date.now() };
-  fakeSessions.push(newS);
-  return newS;
-};
-const updateSessionMessages = (id, messages) => {
-  const s = fakeSessions.find(s => s.id === id);
-  if (s) s.messages = messages;
-};
-const getActiveSessionId = () => fakeSessions.length ? fakeSessions[0].id : null;
-const setActiveSessionId = (id) => {}; // noop for now
-const saveTheme = (theme) => localStorage.setItem('theme', theme);
-const getTheme = () => localStorage.getItem('theme') || 'onyx';
-const addLibraryItem = (title, content) => fakeLibrary.push({ id: Date.now().toString(), title, content });
-const deleteLibraryItem = (id) => { fakeLibrary = fakeLibrary.filter(i => i.id !== id) };
-const renameSession = (id, title) => { const s = fakeSessions.find(s => s.id === id); if(s) s.title = title; };
-const deleteSession = (id) => { fakeSessions = fakeSessions.filter(s => s.id !== id); };
+import { 
+    collection, addDoc, updateDoc, doc, deleteDoc, 
+    query, where, orderBy, onSnapshot, serverTimestamp, writeBatch 
+} from "firebase/firestore";
+import { db } from "../utils/firebase.js";
 
 function ChatInterface({ currentUser, onOpenAuth, onOpenPricing, onLogout }) {
     const [currentSessionId, setCurrentSessionId] = React.useState(null);
