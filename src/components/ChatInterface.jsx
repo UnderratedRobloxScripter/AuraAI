@@ -166,22 +166,54 @@ function ChatInterface({ currentUser, onOpenAuth, onOpenPricing, onLogout }) {
     };
 
     const handleSendMessage = async (text, images, modelMode) => {
+    if (!currentUser) return onOpenAuth();
+
     let sessionId = currentSessionId;
+    
+    // 1. Create session in Firebase if it doesn't exist
     if (!sessionId) {
-        const newSession = createSession();
-        sessionId = newSession.id;
-        setCurrentSessionId(sessionId);
+        try {
+            const docRef = await addDoc(collection(db, "chats"), {
+                userId: currentUser.uid,
+                title: text.substring(0, 40) + "...",
+                messages: [],
+                timestamp: serverTimestamp()
+            });
+            sessionId = docRef.id;
+            setCurrentSessionId(sessionId);
+        } catch (e) { console.error("Error creating chat:", e); return; }
     }
-    const userMsg = { role: 'user', content: text, images: images, timestamp: new Date().toISOString() };
-    const newMessages = [...messages, userMsg];
-    setMessages(newMessages);
+
+    const userMsg = {
+        role: 'user',
+        content: text,
+        images: images || [],
+        timestamp: new Date().toISOString()
+    };
+    
+    const newHistory = [...messages, userMsg];
+    setMessages(newHistory);
     setIsTyping(true);
+
     try {
-        const responseText = await generateAIResponse(newMessages, modelMode);
-        const aiMsg = { role: 'assistant', content: responseText, timestamp: new Date().toISOString() };
-        setMessages(prev => [...prev, aiMsg]);
+        const responseText = await generateAIResponse(newHistory, modelMode);
+        const aiMsg = {
+            role: 'assistant',
+            content: responseText,
+            timestamp: new Date().toISOString()
+        };
+        
+        const finalHistory = [...newHistory, aiMsg];
+        setMessages(finalHistory);
+
+        // 2. Update Firestore with the full conversation
+        await updateDoc(doc(db, "chats", sessionId), {
+            messages: finalHistory,
+            timestamp: serverTimestamp() // Updates the 'last active' time
+        });
+
     } catch (error) {
-        console.error(error);
+        console.error("AI Error:", error);
     } finally {
         setIsTyping(false);
     }
