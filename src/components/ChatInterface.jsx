@@ -153,9 +153,9 @@ function ChatInterface({ currentUser, onOpenAuth, onOpenPricing, onLogout }) {
         setCurrentSessionId(sessionId);
         setMessages(session.messages || []);
         setSidebarOpen(false);
-        setActivePanel(null); // Close sidebar on mobile
+        setActivePanel(null); 
     }
-};
+}; // Ensure this brace is present
 
     const handleNewChat = () => {
     setCurrentSessionId(null);
