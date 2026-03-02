@@ -166,25 +166,26 @@ function ChatInterface({ currentUser, onOpenAuth, onOpenPricing, onLogout }) {
     };
 
     const handleSendMessage = async (text, images, modelMode) => {
-        let sessionId = currentSessionId;
-        
-        // If no session exists (fresh load), create one now
-        if (!sessionId) {
-            const newSession = createSession();
-            sessionId = newSession.id;
-            setCurrentSessionId(sessionId);
-        }
-
-        const userMsg = {
-            role: 'user',
-            content: text,
-            images: images,
-            timestamp: new Date().toISOString()
-        };
-        
-        const newMessages = [...messages, userMsg];
-        setMessages(newMessages);
-        setIsTyping(true);
+    let sessionId = currentSessionId;
+    if (!sessionId) {
+        const newSession = createSession();
+        sessionId = newSession.id;
+        setCurrentSessionId(sessionId);
+    }
+    const userMsg = { role: 'user', content: text, images: images, timestamp: new Date().toISOString() };
+    const newMessages = [...messages, userMsg];
+    setMessages(newMessages);
+    setIsTyping(true);
+    try {
+        const responseText = await generateAIResponse(newMessages, modelMode);
+        const aiMsg = { role: 'assistant', content: responseText, timestamp: new Date().toISOString() };
+        setMessages(prev => [...prev, aiMsg]);
+    } catch (error) {
+        console.error(error);
+    } finally {
+        setIsTyping(false);
+    }
+};
 
         try {
             const responseText = await generateAIResponse(newMessages, modelMode);
