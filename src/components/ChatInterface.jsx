@@ -157,58 +157,68 @@ function ChatInterface({ currentUser, onOpenAuth, onOpenPricing, onLogout }) {
 };
     
     const handleSendMessage = async (text, images, modelMode) => {
-    if (!currentUser) return onOpenAuth();
+        if (!currentUser) return onOpenAuth();
 
-    let sessionId = currentSessionId;
-    
-    // 1. Create session in Firebase if it doesn't exist
-    if (!sessionId) {
-        try {
-            const docRef = await addDoc(collection(db, "chats"), {
-                userId: currentUser.uid,
-                title: text.substring(0, 40) + "...",
-                messages: [],
-                timestamp: serverTimestamp()
-            });
-            sessionId = docRef.id;
-            setCurrentSessionId(sessionId);
-        } catch (e) { console.error("Error creating chat:", e); return; }
-    }
+        let sessionId = currentSessionId;
+        
+        // 1. Create session in Firebase if it doesn't exist
+        if (!sessionId) {
+            try {
+                const docRef = await addDoc(collection(db, "chats"), {
+                    userId: currentUser.uid,
+                    title: text.substring(0, 40) + "...",
+                    messages: [],
+                    timestamp: serverTimestamp()
+                });
+                sessionId = docRef.id;
+                setCurrentSessionId(sessionId);
+            } catch (e) { 
+                console.error("Error creating chat:", e); 
+                return; 
+            }
+        }
 
-    const userMsg = {
-        role: 'user',
-        content: text,
-        images: images || [],
-        timestamp: new Date().toISOString()
-    };
-    
-    const newHistory = [...messages, userMsg];
-    setMessages(newHistory);
-    setIsTyping(true);
-
-    try {
-        const responseText = await generateAIResponse(newHistory, modelMode);
-        const aiMsg = {
-            role: 'assistant',
-            content: responseText,
+        const userMsg = {
+            role: 'user',
+            content: text,
+            images: images || [],
             timestamp: new Date().toISOString()
         };
         
-        const finalHistory = [...newHistory, aiMsg];
-        setMessages(finalHistory);
+        const newHistory = [...messages, userMsg];
+        setMessages(newHistory);
+        setIsTyping(true);
 
-        // 2. Update Firestore with the full conversation
-        await updateDoc(doc(db, "chats", sessionId), {
-            messages: finalHistory,
-            timestamp: serverTimestamp() // Updates the 'last active' time
-        });
+        try {
+            // 2. Generate AI Response
+            const responseText = await generateAIResponse(newHistory, modelMode);
+            const aiMsg = {
+                role: 'assistant',
+                content: responseText,
+                timestamp: new Date().toISOString()
+            };
+            
+            const finalHistory = [...newHistory, aiMsg];
+            setMessages(finalHistory);
 
-    } catch (error) {
-        console.error("AI Error:", error);
-    } finally {
-        setIsTyping(false);
-    }
-};
+            // 3. Update Firestore with the full conversation
+            await updateDoc(doc(db, "chats", sessionId), {
+                messages: finalHistory,
+                timestamp: serverTimestamp()
+            });
+
+        } catch (error) {
+            console.error("AI Error:", error);
+            const errorMsg = {
+                role: 'assistant',
+                content: "I encountered an error processing your request.",
+                timestamp: new Date().toISOString()
+            };
+            setMessages(prev => [...prev, errorMsg]);
+        } finally {
+            setIsTyping(false);
+        }
+    }; // <--- MAKE SURE THIS BRACE CLOSES THE FUNCTION
 
         try {
             const responseText = await generateAIResponse(newMessages, modelMode);
