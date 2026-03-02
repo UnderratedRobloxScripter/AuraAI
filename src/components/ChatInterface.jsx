@@ -145,16 +145,14 @@ function ChatInterface({ currentUser, onOpenAuth, onOpenPricing, onLogout }) {
     };
 
     const loadSession = (sessionId) => {
-        const session = getSession(sessionId);
-        if (session) {
-            setCurrentSessionId(sessionId);
-            setMessages(session.messages || []);
-            setSidebarOpen(false); // Close mobile sidebar if open
-        } else {
-            setCurrentSessionId(null);
-            setMessages([]);
-        }
-    };
+    const session = sessions.find(s => s.id === sessionId);
+    if (session) {
+        setCurrentSessionId(sessionId);
+        setMessages(session.messages || []);
+        setSidebarOpen(false);
+        setActivePanel(null); // Close sidebar on mobile
+    }
+};
 
     const handleNewChat = () => {
         const newSession = createSession();
@@ -281,31 +279,35 @@ function ChatInterface({ currentUser, onOpenAuth, onOpenPricing, onLogout }) {
         }
     };
 
-    const handleDeleteSession = (e, sessionId) => {
-        e.stopPropagation();
-        if (confirm('Are you sure you want to delete this chat?')) {
-            deleteSession(sessionId);
-            refreshSessions();
+    const handleDeleteSession = async (e, sessionId) => {
+    e.stopPropagation();
+    if (confirm('Are you sure you want to delete this chat?')) {
+        try {
+            await deleteDoc(doc(db, "chats", sessionId));
             if (currentSessionId === sessionId) {
-                handleNewChat();
+                setCurrentSessionId(null);
+                setMessages([]);
             }
-        }
-    };
-
+        } catch (e) { console.error("Delete failed:", e); }
+    }
+};
     const startEditing = (e, session) => {
         e.stopPropagation();
         setEditingSessionId(session.id);
         setEditTitle(session.title);
     };
 
-    const saveEditing = (e) => {
-        e.stopPropagation();
-        if (editingSessionId) {
-            renameSession(editingSessionId, editTitle);
+    const saveEditing = async (e) => {
+    e.stopPropagation();
+    if (editingSessionId) {
+        try {
+            await updateDoc(doc(db, "chats", editingSessionId), {
+                title: editTitle
+            });
             setEditingSessionId(null);
-            refreshSessions();
-        }
-    };
+        } catch (e) { console.error("Rename failed:", e); }
+    }
+};
 
     const cancelEditing = (e) => {
         e.stopPropagation();
@@ -313,14 +315,21 @@ function ChatInterface({ currentUser, onOpenAuth, onOpenPricing, onLogout }) {
     };
 
     // Library Functions
-    const handleAddLibraryItem = () => {
-        if (!newPromptTitle.trim() || !newPromptContent.trim()) return;
-        addLibraryItem(newPromptTitle, newPromptContent);
+    const handleAddLibraryItem = async () => {
+    if (!newPromptTitle.trim() || !newPromptContent.trim() || !currentUser) return;
+    
+    try {
+        await addDoc(collection(db, "library"), {
+            userId: currentUser.uid,
+            title: newPromptTitle,
+            content: newPromptContent,
+            timestamp: serverTimestamp()
+        });
         setNewPromptTitle('');
         setNewPromptContent('');
         setShowAddPrompt(false);
-        refreshLibrary();
-    };
+    } catch (e) { console.error("Library save failed:", e); }
+};
 
     const handleDeleteLibraryItem = (id) => {
          if (confirm('Remove this item from library?')) {
