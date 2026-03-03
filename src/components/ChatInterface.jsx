@@ -9,16 +9,14 @@ import {
     query, where, orderBy, onSnapshot, serverTimestamp, writeBatch 
 } from "firebase/firestore";
 import { db } from "../utils/firebase.js";
+const saveTheme = (theme) => localStorage.setItem('theme', theme);
+const getTheme = () => localStorage.getItem('theme') || 'onyx';
+
 function ChatInterface({ currentUser, onOpenAuth, onOpenPricing, onLogout }) {
     const [currentSessionId, setCurrentSessionId] = React.useState(null);
     const [messages, setMessages] = React.useState([]);
     const [sessions, setSessions] = React.useState([]);
     const [libraryItems, setLibraryItems] = React.useState([]);
-    //to fix errors
-    // Add these back near the top of your file
-    const saveTheme = (theme) => localStorage.setItem('theme', theme);
-    const getTheme = () => localStorage.getItem('theme') || 'onyx';
-    
     const [isTyping, setIsTyping] = React.useState(false);
     const [sidebarOpen, setSidebarOpen] = React.useState(false); 
     const [activePanel, setActivePanel] = React.useState(null); 
