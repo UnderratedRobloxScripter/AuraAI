@@ -218,29 +218,6 @@ function ChatInterface({ currentUser, onOpenAuth, onOpenPricing, onLogout }) {
         }
     }; // <--- MAKE SURE THIS BRACE CLOSES THE FUNCTION
 
-        try {
-            const responseText = await generateAIResponse(newMessages, modelMode);
-            
-            const aiMsg = {
-                role: 'assistant',
-                content: responseText,
-                timestamp: new Date().toISOString()
-            };
-            
-            setMessages(prev => [...prev, aiMsg]);
-        } catch (error) {
-            console.error(error);
-            const errorMsg = {
-                role: 'assistant',
-                content: "I encountered an error processing your request.",
-                timestamp: new Date().toISOString()
-            };
-            setMessages(prev => [...prev, errorMsg]);
-        } finally {
-            setIsTyping(false);
-        }
-    };
-
     const handleEditMessage = async (index, newText) => {
         // 1. Slice history up to the edited message
         // We keep everything BEFORE the edited message
