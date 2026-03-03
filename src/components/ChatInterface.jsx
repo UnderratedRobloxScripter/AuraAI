@@ -324,15 +324,20 @@ function ChatInterface({ currentUser, onOpenAuth, onOpenPricing, onLogout }) {
 
     // Settings Functions
     const clearAllHistory = async () => {
-    if (confirm('DANGER: This will permanently delete ALL chat history. Are you sure?')) {
-        const batch = writeBatch(db);
-        sessions.forEach((session) => {
-            batch.delete(doc(db, "chats", session.id));
-        });
-        await batch.commit();
-        handleNewChat();
-    }
-};
+        if (!currentUser) return;
+        if (confirm("Are you sure you want to clear all chat history? This cannot be undone.")) {
+            try {
+                const batch = writeBatch(db);
+                sessions.forEach((session) => {
+                    batch.delete(doc(db, "chats", session.id));
+                });
+                await batch.commit();
+                handleNewChat();
+            } catch (error) {
+                console.error("Error clearing history:", error);
+            }
+        }
+    };
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -621,16 +626,11 @@ function ChatInterface({ currentUser, onOpenAuth, onOpenPricing, onLogout }) {
                                 </div>
 
                                 <div>
-                                    <h3 className="text-xs font-bold text-gray-500 uppercase mb-3">About</h3>
-                                    <div className="p-3 bg-[var(--bg-primary)] rounded-lg border border-white/5">
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <div className="icon-orbit text-white"></div>
-                                            <span className="font-bold">Aura v1.5</span>
-                                        </div>
-                                        <p className="text-xs text-gray-500">
-                                            A minimalist AI interface designed for speed and clarity.
-                                            Inspired by Grok.
-                                        </p>
+                                    {/* ... continuing from the 'Data' section in Settings */}
+                                    <h3 className="text-xs font-bold text-gray-500 uppercase mb-3 mt-6">About</h3>
+                                    <div className="text-xs text-gray-500 space-y-1">
+                                        <p>Aura AI v1.2.0</p>
+                                        <p>© 2024 Aura Labs</p>
                                     </div>
                                 </div>
                             </div>
@@ -639,136 +639,64 @@ function ChatInterface({ currentUser, onOpenAuth, onOpenPricing, onLogout }) {
                 </div>
             )}
 
-            {/* Mobile Sidebar (Drawer) */}
-            <div className={`fixed inset-y-0 left-0 w-64 bg-[var(--bg-primary)] z-50 transform transition-transform duration-300 md:hidden ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-                 <div className="p-4 border-b border-white/10 flex justify-between items-center">
-                    <span className="font-bold">Aura</span>
-                    <button onClick={() => setSidebarOpen(false)}><div className="icon-x"></div></button>
-                 </div>
-                 <div className="p-4 space-y-4">
-                    <button onClick={handleNewChat} className="flex items-center gap-3 text-white w-full p-2 hover:bg-white/10 rounded-lg">
-                        <div className="icon-square-pen"></div> New Chat
-                    </button>
-
-                    {/* Mobile Auth Button */}
-                    <button 
-                        onClick={() => {
-                            if (currentUser) onOpenPricing();
-                            else onOpenAuth();
-                        }}
-                        className="flex items-center gap-3 text-white w-full p-2 hover:bg-white/10 rounded-lg"
-                    >
-                        <div className="icon-user"></div> {currentUser ? 'Manage Account' : 'Sign In'}
-                    </button>
-                    
-                    <div className="border-t border-white/10 pt-4">
-                        <div className="text-xs font-bold text-gray-500 uppercase mb-2">Recent History</div>
-                        <div className="space-y-1">
-                             {sessions.slice(0, 5).map(session => (
-                                <button 
-                                    key={session.id}
-                                    onClick={() => loadSession(session.id)}
-                                    className="block w-full text-left text-sm text-gray-300 p-2 hover:bg-white/5 rounded truncate"
-                                >
-                                    {session.title}
-                                </button>
-                             ))}
-                        </div>
-                    </div>
-                 </div>
-            </div>
-
-            {/* Main Content Area */}
-            <main className="flex-1 flex flex-col relative h-full w-full min-w-0">
-                
-                {/* Mobile Header */}
-                <header className="md:hidden absolute top-0 left-0 right-0 h-16 flex items-center justify-between px-4 z-20 bg-black/50 backdrop-blur-md">
-                    <button onClick={() => setSidebarOpen(true)} className="p-2 text-gray-400">
-                        <div className="icon-menu text-xl"></div>
-                    </button>
-                    <span className="font-bold">Aura</span>
-                    <div className="w-8"></div>
-                </header>
-
-                {/* Content Container */}
-                <div className="flex-1 overflow-y-auto thin-scrollbar relative flex flex-col">
-                    
+            {/* Main Chat Area */}
+            <main className="flex-1 flex flex-col relative min-w-0">
+                {/* Messages Container */}
+                <div className="flex-1 overflow-y-auto p-4 space-y-6 thin-scrollbar">
                     {isHome ? (
-                        /* HOME STATE - ALIGNMENT FIXED */
-                        <div className="flex-1 flex flex-col items-center justify-center p-4 w-full h-full min-h-[calc(100vh-64px)] max-w-3xl mx-auto animate-fade-in-up">
-                            
-                            {/* Big Logo */}
-                            <div className="mb-10 flex flex-col items-center select-none">
-                                <span className="text-5xl md:text-6xl font-bold tracking-tight text-white mb-6">Aura</span>
+                        <div className="h-full flex flex-col items-center justify-center text-center p-4 max-w-2xl mx-auto space-y-6">
+                            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-white to-gray-500 flex items-center justify-center shadow-2xl animate-pulse">
+                                <div className="icon-sparkles text-black text-3xl"></div>
                             </div>
-
-                            {/* Input Bar - Centered */}
-                            <div className="w-full mb-8 z-30">
-                                <InputBar onSendMessage={handleSendMessage} isTyping={isTyping} compact={false} />
+                            <div>
+                                <h1 className="text-4xl font-bold mb-2 tracking-tight">How can I help you today?</h1>
+                                <p className="text-gray-400 text-lg">Select a model and start a conversation with Aura.</p>
                             </div>
-
-                            {/* Connect Saturn Banner (Only if guest) */}
-                            {!currentUser && (
-                                <div 
-                                    onClick={onOpenAuth}
-                                    className="flex items-center gap-4 bg-[var(--bg-secondary)] border border-white/10 rounded-full px-5 py-3 hover:bg-[#1a1a1a] transition-colors cursor-pointer group"
-                                >
-                                    <div className="w-8 h-8 rounded-full bg-black flex items-center justify-center border border-white/10">
-                                        <div className="icon-orbit text-white text-lg"></div>
-                                    </div>
-                                    <div className="flex flex-col">
-                                        <span className="text-sm font-semibold text-white group-hover:underline decoration-1 underline-offset-2">Connect your Aura account</span>
-                                        <span className="text-xs text-gray-500">Unlock early features and personalized content.</span>
-                                    </div>
-                                    <button className="ml-4 px-4 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-sm font-medium transition-colors">
-                                        Connect
-                                    </button>
-                                </div>
-                            )}
-
                         </div>
                     ) : (
-                        /* CHAT STATE */
-                        <div className="flex flex-col min-h-full">
-                            {/* Messages */}
-                            <div className="flex-1 w-full max-w-3xl mx-auto px-4 pt-20 pb-4">
-                                {messages.map((msg, idx) => (
-                                    <MessageBubble 
-                                        key={idx} 
-                                        index={idx} 
-                                        message={msg} 
-                                        onEdit={handleEditMessage} 
-                                    />
-                                ))}
-                                
-                                {isTyping && (
-                                    <div className="flex items-center space-x-1 ml-4 mb-8 text-gray-500">
-                                        <div className="w-2 h-2 bg-white rounded-full typing-dot"></div>
-                                        <div className="w-2 h-2 bg-white rounded-full typing-dot"></div>
-                                        <div className="w-2 h-2 bg-white rounded-full typing-dot"></div>
+                        <div className="max-w-4xl mx-auto w-full space-y-6 pb-20">
+                            {messages.map((msg, idx) => (
+                                <MessageBubble 
+                                    key={idx} 
+                                    message={msg} 
+                                    onEdit={(newText) => handleEditMessage(idx, newText)} 
+                                />
+                            ))}
+                            {isTyping && (
+                                <div className="flex gap-4 animate-in fade-in slide-in-from-bottom-2">
+                                    <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center border border-white/10">
+                                        <div className="icon-sparkles text-xs text-gray-400"></div>
                                     </div>
-                                )}
-                                <div ref={messagesEndRef}></div>
-                            </div>
-                            
-                            {/* Sticky Bottom Input */}
-                            <div className="sticky bottom-0 w-full bg-gradient-to-t from-[var(--bg-primary)] via-[var(--bg-primary)] to-transparent pt-10 pb-6 px-4 z-20 transition-colors duration-500">
-                                <div className="max-w-3xl mx-auto">
-                                    <InputBar onSendMessage={handleSendMessage} isTyping={isTyping} compact={true} />
-                                    <div className="text-center mt-3 text-xs text-[#555] font-medium tracking-wide pb-2">
-                                        Aura can make mistakes.
+                                    <div className="text-sm text-gray-500 mt-1.5 flex items-center gap-2">
+                                        Aura is thinking
+                                        <span className="flex gap-1">
+                                            <span className="w-1 h-1 bg-gray-500 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
+                                            <span className="w-1 h-1 bg-gray-500 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
+                                            <span className="w-1 h-1 bg-gray-500 rounded-full animate-bounce"></span>
+                                        </span>
                                     </div>
                                 </div>
-                            </div>
+                            )}
+                            <div ref={messagesEndRef} />
                         </div>
                     )}
                 </div>
 
-                {/* Bottom Right Floating "Aura Premium" Card */}
-                {showPremiumCard && (
+                {/* Input Area */}
+                <div className="p-4 border-t border-white/5 bg-[var(--bg-primary)]">
+                    <div className="max-w-4xl mx-auto">
+                        <InputBar onSend={handleSendMessage} disabled={isTyping} />
+                        <p className="text-[10px] text-gray-500 text-center mt-3">
+                            Aura can make mistakes. Check important info.
+                        </p>
+                    </div>
+                </div>
+
+                {/* Premium Banner (Overlay) */}
+                {showPremiumCard && !isHome && (
                     <div 
                         onClick={onOpenPricing}
-                        className="fixed bottom-6 right-6 hidden lg:flex items-center gap-3 bg-[#111] border border-white/10 p-2 pr-4 rounded-full shadow-2xl cursor-pointer hover:border-white/20 transition-all z-30 group"
+                        className="fixed bottom-24 right-6 hidden lg:flex items-center gap-3 bg-[#111] border border-white/10 p-2 pr-4 rounded-full shadow-2xl cursor-pointer hover:border-white/20 transition-all z-30 group"
                     >
                         <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-900 to-black flex items-center justify-center">
                             <div className="icon-sparkles text-white text-lg"></div>
@@ -778,21 +706,11 @@ function ChatInterface({ currentUser, onOpenAuth, onOpenPricing, onLogout }) {
                             <span className="text-[10px] text-gray-400">Unlock extended capabilities</span>
                         </div>
                         <button className="ml-2 px-3 py-1 bg-white text-black text-xs font-bold rounded-full">Upgrade</button>
-                        
-                        {/* Close Button on Hover */}
-                        <button 
-                            onClick={(e) => { e.stopPropagation(); setShowPremiumCard(false); }}
-                            className="absolute -top-2 -right-2 bg-black border border-white/20 rounded-full p-0.5 text-white opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                            <div className="icon-x text-xs"></div>
-                        </button>
                     </div>
                 )}
-
             </main>
         </div>
     );
 }
-
 
 export default ChatInterface;
