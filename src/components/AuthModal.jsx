@@ -7,6 +7,7 @@ import {
 } from "firebase/auth";
 import { auth, googleProvider, db } from "../utils/firebase";
 import { doc, setDoc, getDoc } from "firebase/firestore";
+import { X, Eye, EyeOff, Mail, Apple, CheckCircle2, AlertCircle } from 'lucide-react'; // Import icons
 
 function AuthModal({ isOpen, onClose, onLogin }) {
     const [isSignUp, setIsSignUp] = useState(false);
@@ -72,122 +73,83 @@ function AuthModal({ isOpen, onClose, onLogin }) {
     };
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-xl animate-in fade-in duration-500">
-            {/* Full Screen Container */}
-            <div className="relative w-full max-w-[440px] bg-[#050505] border border-white/10 rounded-[2.5rem] p-10 shadow-[0_0_50px_-12px_rgba(168,85,247,0.2)] overflow-hidden scale-in-center animate-in zoom-in-95 duration-300">
-                
-                {/* High-End Ambient Glows */}
-                <div className="absolute -top-24 -left-24 w-64 h-64 bg-purple-600/10 blur-[120px] rounded-full pointer-events-none"></div>
-                <div className="absolute -bottom-24 -right-24 w-64 h-64 bg-blue-600/10 blur-[120px] rounded-full pointer-events-none"></div>
-                
-                <div className="relative z-10">
-                    <div className="flex justify-between items-start mb-10">
-                        <div className="space-y-2">
-                            <h2 className="text-3xl font-bold text-white tracking-tight">
-                                {isSignUp ? "Create account" : "Welcome back"}
-                            </h2>
-                            <p className="text-gray-400 text-sm font-medium">
-                                {isSignUp ? "Start your journey with Aura" : "Enter your details to continue"}
-                            </p>
+        <div className="fixed inset-0 z-[100] flex animate-fade-in duration-500 overflow-hidden">
+            {/* Left Side: Dark Log-in Form */}
+            <div className="w-1/2 h-full bg-black text-white p-16 flex flex-col justify-between">
+                <div>
+                    <div className="flex justify-between items-center mb-16">
+                        <img src="path_to_x1_logo.png" alt="X1 Logo" className="h-8" /> {/* Replace with actual logo */}
+                        <div className="flex items-center gap-2 border border-neutral-800 rounded-full px-4 py-2 text-sm text-neutral-400">
+                           <span className="font-medium text-white">You are signing into</span>
+                           <div className="flex items-center gap-1.5 font-semibold text-white">
+                                <div className="icon-orbit text-xs"></div> {/* Replace with orbit icon */}
+                                Grok
+                                <div className="icon-chevron-down text-xs"></div>
+                           </div>
                         </div>
-                        <button onClick={onClose} className="group p-2 bg-white/5 hover:bg-white/10 rounded-full transition-all">
-                            <div className="icon-x text-gray-400 group-hover:text-white transition-colors"></div>
-                        </button>
                     </div>
-
-                    {error && (
-                        <div className="mb-6 p-4 bg-red-500/5 border border-red-500/20 rounded-2xl text-red-400 text-xs font-medium flex items-center gap-3 animate-bounce-short">
-                            <div className="icon-alert-circle text-base"></div>
-                            {error}
-                        </div>
-                    )}
-
-                    <form onSubmit={handleEmailAuth} className="space-y-5">
-                        {isSignUp && (
-                            <div className="group space-y-2">
-                                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500 ml-1 transition-colors group-focus-within:text-purple-400">Full Name</label>
-                                <input 
-                                    type="text" required value={name} onChange={(e) => setName(e.target.value)}
-                                    className="w-full bg-white/[0.03] border border-white/10 rounded-2xl px-5 py-4 text-white focus:outline-none focus:border-purple-500/50 focus:bg-white/[0.06] transition-all placeholder:text-gray-600"
-                                    placeholder="John Doe"
-                                />
-                            </div>
-                        )}
+                
+                    <div className="max-w-md mx-auto flex-1 flex flex-col justify-center gap-10">
+                        <h2 className="text-4xl font-bold tracking-tighter text-center">Log into your account</h2>
                         
-                        <div className="group space-y-2">
-                            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500 ml-1 transition-colors group-focus-within:text-purple-400">Email Address</label>
-                            <input 
-                                type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
-                                className="w-full bg-white/[0.03] border border-white/10 rounded-2xl px-5 py-4 text-white focus:outline-none focus:border-purple-500/50 focus:bg-white/[0.06] transition-all placeholder:text-gray-600"
-                                placeholder="name@domain.com"
-                            />
-                        </div>
-
-                        <div className="group space-y-2">
-                            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500 ml-1 transition-colors group-focus-within:text-purple-400">Password</label>
+                        <div className="space-y-4">
+                            <button className="w-full flex items-center justify-center gap-3 bg-white text-black font-semibold py-4 rounded-full text-lg hover:bg-neutral-100 transition-colors">
+                                <Apple className="w-6 h-6" />
+                                Login with X
+                            </button>
+                            
                             <div className="relative">
-                                <input 
-                                    type={showPassword ? "text" : "password"} 
-                                    required value={password} onChange={(e) => setPassword(e.target.value)}
-                                    className="w-full bg-white/[0.03] border border-white/10 rounded-2xl px-5 py-4 pr-14 text-white focus:outline-none focus:border-purple-500/50 focus:bg-white/[0.06] transition-all placeholder:text-gray-600"
-                                    placeholder="••••••••"
-                                />
-                                <button 
-                                    type="button"
-                                    onClick={() => setShowPassword(!showPassword)}
-                                    className="absolute right-5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white transition-colors"
-                                >
-                                    {showPassword ? (
-                                        <div className="icon-eye-off text-lg"></div> // Ensure you have eye/eye-off icons
-                                    ) : (
-                                        <div className="icon-eye text-lg"></div>
-                                    )}
-                                </button>
+                                <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-neutral-800"></div></div>
+                                <div className="relative flex justify-center text-xs uppercase font-medium text-neutral-600">
+                                    <span className="bg-black px-4">OR</span>
+                                </div>
                             </div>
+
+                            <button className="w-full flex items-center justify-center gap-3 bg-neutral-900 text-white font-medium py-4 rounded-full text-lg border border-neutral-800 hover:bg-neutral-800 transition-colors">
+                                <Mail className="w-5 h-5" />
+                                Login with email
+                            </button>
+                            <button className="w-full flex items-center justify-center gap-3 bg-neutral-900 text-white font-medium py-4 rounded-full text-lg border border-neutral-800 hover:bg-neutral-800 transition-colors">
+                                <img src="https://authjs.dev/img/providers/google.svg" alt="Google Logo" className="w-5 h-5" />
+                                Login with Google
+                            </button>
+                            <button className="w-full flex items-center justify-center gap-3 bg-neutral-900 text-white font-medium py-4 rounded-full text-lg border border-neutral-800 hover:bg-neutral-800 transition-colors">
+                                <Apple className="w-5 h-5" />
+                                Login with Apple
+                            </button>
                         </div>
 
-                        <button 
-                            type="submit" disabled={loading}
-                            className="w-full h-[60px] bg-white text-black font-black rounded-2xl hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 shadow-lg shadow-white/5 flex items-center justify-center gap-3 disabled:opacity-50"
-                        >
-                            {loading ? (
-                                <div className="w-6 h-6 border-3 border-black/20 border-t-black rounded-full animate-spin"></div>
-                            ) : (
-                                <span>{isSignUp ? "Create Account" : "Sign In"}</span>
-                            )}
-                        </button>
-                    </form>
-
-                    <div className="relative my-10">
-                        <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/5"></div></div>
-                        <div className="relative flex justify-center text-[10px] uppercase tracking-[0.3em] font-black text-gray-600">
-                            <span className="bg-[#050505] px-6">Third Party</span>
+                        <div className="text-center">
+                            <button className="text-neutral-400 hover:text-white transition-colors text-lg">
+                                Don't have an account? <span className="font-semibold text-white">Sign up</span>
+                            </button>
                         </div>
-                    </div>
-
-                    <button 
-                        onClick={handleGoogleAuth} disabled={loading}
-                        className="w-full h-[60px] bg-white/[0.03] border border-white/10 text-white font-bold rounded-2xl hover:bg-white/10 transition-all flex items-center justify-center gap-4 group"
-                    >
-                        <div className="icon-google text-xl group-hover:scale-110 transition-transform"></div>
-                        <span className="tracking-tight">Continue with Google</span>
-                    </button>
-
-                    <div className="mt-10 text-center">
-                        <button 
-                            onClick={() => {
-                                setIsSignUp(!isSignUp);
-                                setError("");
-                            }}
-                            className="text-sm font-medium text-gray-500 hover:text-white transition-colors group"
-                        >
-                            {isSignUp ? "Already have an account?" : "Don't have an account?"}
-                            <span className="ml-2 text-white font-bold decoration-white/30 group-hover:underline underline-offset-4">
-                                {isSignUp ? "Sign In" : "Sign Up"}
-                            </span>
-                        </button>
                     </div>
                 </div>
+
+                <div className="max-w-md mx-auto text-neutral-600 text-sm text-center">
+                   By continuing, you agree to xAI's <span className="underline hover:text-white transition-colors cursor-pointer">Terms of Service</span> and <span className="underline hover:text-white transition-colors cursor-pointer">Privacy Policy</span>.
+                </div>
+            </div>
+
+            {/* Right Side: Abstract Graphics */}
+            <div className="w-1/2 h-full relative overflow-hidden flex items-center justify-center bg-black">
+                {/* Large G-like shape */}
+                <div className="absolute inset-0 border-[100px] border-neutral-800 rounded-full opacity-20 transform translate-x-[-15%]"></div>
+                
+                {/* Diagonal line */}
+                <div className="absolute top-0 right-0 w-[200%] h-full transform origin-top-right rotate-[-45deg] bg-neutral-950 opacity-40"></div>
+                
+                {/* Glowing orb/gradient */}
+                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[120%] h-[120%] rounded-full bg-gradient-radial from-blue-900/40 via-blue-950/10 to-transparent blur-[150px]"></div>
+
+                {/* Lucide X Button */}
+                <button 
+                    onClick={onClose} 
+                    className="absolute top-8 right-8 p-3 bg-white/5 hover:bg-white/10 rounded-full transition-colors z-50 group"
+                >
+                    <X className="w-8 h-8 text-neutral-500 group-hover:text-white transition-colors" />
+                </button>
             </div>
         </div>
     );
