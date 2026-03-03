@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { 
-    signInWithEmailAndPassword, 
-    createUserWithEmailAndPassword, 
+    sendSignInLinkToEmail, 
+    isSignInWithEmailLink, 
+    signInWithEmailLink,
     signInWithPopup,
     updateProfile 
 } from "firebase/auth";
@@ -9,16 +10,38 @@ import { auth, googleProvider, db } from "../utils/firebase";
 import { doc, setDoc, getDoc } from "firebase/firestore";
 
 function AuthModal({ isOpen, onClose, onLogin }) {
-    const [isSignUp, setIsSignUp] = useState(false);
     const [email, setEmail] = useState("");
-    const [password, setPassword] = useState("");
     const [name, setName] = useState("");
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
+    const [linkSent, setLinkSent] = useState(false);
+
+    // 1. Check if the user is returning to the app after clicking the email link
+    useEffect(() => {
+        if (isSignInWithEmailLink(auth, window.location.href)) {
+            let savedEmail = window.localStorage.getItem('emailForSignIn');
+            if (!savedEmail) {
+                // If the user opened the link on a different device
+                savedEmail = window.prompt('Please provide your email for confirmation');
+            }
+            
+            setLoading(true);
+            signInWithEmailLink(auth, savedEmail, window.location.href)
+                .then(async (result) => {
+                    window.localStorage.removeItem('emailForSignIn');
+                    await syncUserToFirestore(result.user);
+                    onLogin(result.user);
+                    onClose();
+                })
+                .catch((err) => {
+                    setError(err.message);
+                })
+                .finally(() => setLoading(false));
+        }
+    }, [onLogin, onClose]);
 
     if (!isOpen) return null;
 
-    // Save user to Firestore after login/signup
     const syncUserToFirestore = async (user, displayName) => {
         const userRef = doc(db, "users", user.uid);
         const snap = await getDoc(userRef);
@@ -34,21 +57,23 @@ function AuthModal({ isOpen, onClose, onLogin }) {
         }
     };
 
-    const handleEmailAuth = async (e) => {
+    // 2. Handle OTP (Sign-in Link) Sending
+    const handleSendOTP = async (e) => {
         e.preventDefault();
         setError("");
         setLoading(true);
+
+        const actionCodeSettings = {
+            // URL you want to redirect back to. Must be whitelisted in Firebase Console.
+            url: window.location.href, 
+            handleCodeInApp: true,
+        };
+
         try {
-            let userCredential;
-            if (isSignUp) {
-                userCredential = await createUserWithEmailAndPassword(auth, email, password);
-                await updateProfile(userCredential.user, { displayName: name });
-                await syncUserToFirestore(userCredential.user, name);
-            } else {
-                userCredential = await signInWithEmailAndPassword(auth, email, password);
-            }
-            onLogin(userCredential.user);
-            onClose();
+            await sendSignInLinkToEmail(auth, email, actionCodeSettings);
+            // Save email locally to avoid asking user again on the same device
+            window.localStorage.setItem('emailForSignIn', email);
+            setLinkSent(true);
         } catch (err) {
             setError(err.message.replace("Firebase: ", ""));
         } finally {
@@ -60,7 +85,6 @@ function AuthModal({ isOpen, onClose, onLogin }) {
         setError("");
         setLoading(true);
         try {
-            // Using Popup instead of Redirect to fix the Vercel/Firefox cookie bug 💀
             const result = await signInWithPopup(auth, googleProvider);
             await syncUserToFirestore(result.user);
             onLogin(result.user);
@@ -75,17 +99,18 @@ function AuthModal({ isOpen, onClose, onLogin }) {
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
             <div className="relative w-full max-w-md bg-[#0a0a0a] border border-white/10 rounded-2xl p-8 shadow-2xl overflow-hidden">
-                {/* Background Glow */}
                 <div className="absolute -top-24 -left-24 w-48 h-48 bg-purple-600/20 blur-[100px] rounded-full"></div>
                 
                 <div className="relative z-10">
                     <div className="flex justify-between items-center mb-8">
                         <div>
                             <h2 className="text-2xl font-bold text-white tracking-tight">
-                                {isSignUp ? "Create account" : "Welcome back"}
+                                {linkSent ? "Check your email" : "Sign in to Aura"}
                             </h2>
                             <p className="text-gray-500 text-sm mt-1">
-                                {isSignUp ? "Start your journey with Aura" : "Log in to your Aura account"}
+                                {linkSent 
+                                    ? `We sent a secure login link to ${email}` 
+                                    : "Enter your email to receive a secure login link."}
                             </p>
                         </div>
                         <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-full transition-colors">
@@ -100,41 +125,35 @@ function AuthModal({ isOpen, onClose, onLogin }) {
                         </div>
                     )}
 
-                    <form onSubmit={handleEmailAuth} className="space-y-4">
-                        {isSignUp && (
+                    {!linkSent ? (
+                        <form onSubmit={handleSendOTP} className="space-y-4">
                             <div className="space-y-1.5">
-                                <label className="text-[11px] font-bold uppercase tracking-widest text-gray-500 ml-1">Full Name</label>
+                                <label className="text-[11px] font-bold uppercase tracking-widest text-gray-500 ml-1">Email Address</label>
                                 <input 
-                                    type="text" required value={name} onChange={(e) => setName(e.target.value)}
+                                    type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
                                     className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-white/20 transition-all"
-                                    placeholder="Enter your name"
+                                    placeholder="name@example.com"
                                 />
                             </div>
-                        )}
-                        <div className="space-y-1.5">
-                            <label className="text-[11px] font-bold uppercase tracking-widest text-gray-500 ml-1">Email Address</label>
-                            <input 
-                                type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
-                                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-white/20 transition-all"
-                                placeholder="name@example.com"
-                            />
-                        </div>
-                        <div className="space-y-1.5">
-                            <label className="text-[11px] font-bold uppercase tracking-widest text-gray-500 ml-1">Password</label>
-                            <input 
-                                type="password" required value={password} onChange={(e) => setPassword(e.target.value)}
-                                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-white/20 transition-all"
-                                placeholder="••••••••"
-                            />
-                        </div>
 
-                        <button 
-                            type="submit" disabled={loading}
-                            className="w-full bg-white text-black font-bold py-3 rounded-xl hover:bg-gray-200 transition-all mt-2 disabled:opacity-50 flex items-center justify-center gap-2"
-                        >
-                            {loading ? <div className="w-5 h-5 border-2 border-black/20 border-t-black rounded-full animate-spin"></div> : (isSignUp ? "Create Account" : "Sign In")}
-                        </button>
-                    </form>
+                            <button 
+                                type="submit" disabled={loading}
+                                className="w-full bg-white text-black font-bold py-3 rounded-xl hover:bg-gray-200 transition-all mt-2 disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                                {loading ? <div className="w-5 h-5 border-2 border-black/20 border-t-black rounded-full animate-spin"></div> : "Send Login Link"}
+                            </button>
+                        </form>
+                    ) : (
+                        <div className="text-center py-4">
+                            <div className="icon-mail text-4xl text-purple-500 mb-4 animate-bounce"></div>
+                            <button 
+                                onClick={() => setLinkSent(false)} 
+                                className="text-xs text-gray-400 hover:text-white underline"
+                            >
+                                Entered wrong email? Try again
+                            </button>
+                        </div>
+                    )}
 
                     <div className="relative my-8">
                         <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/5"></div></div>
@@ -150,15 +169,6 @@ function AuthModal({ isOpen, onClose, onLogin }) {
                         <div className="icon-google group-hover:scale-110 transition-transform"></div>
                         <span>Google Account</span>
                     </button>
-
-                    <div className="mt-8 text-center">
-                        <button 
-                            onClick={() => setIsSignUp(!isSignUp)}
-                            className="text-sm text-gray-500 hover:text-white transition-colors underline underline-offset-4"
-                        >
-                            {isSignUp ? "Already have an account? Sign in" : "Don't have an account? Sign up"}
-                        </button>
-                    </div>
                 </div>
             </div>
         </div>
